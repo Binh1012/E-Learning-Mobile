@@ -35,7 +35,7 @@ class _SplashScreenState extends State<SplashScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.white, // Màu xanh lá chính
+              Colors.white, // Primary green color
               Colors.white,
             ],
           ),
@@ -44,7 +44,6 @@ class _SplashScreenState extends State<SplashScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo mũ tốt nghiệp - sử dụng ảnh từ assets
               Container(
                 width: 200,
                 height: 200,
@@ -58,7 +57,6 @@ class _SplashScreenState extends State<SplashScreen> {
                     width: 180,
                     height: 120,
                     fit: BoxFit.contain,
-                    // Nếu không có ảnh, sẽ hiển thị icon mặc định
                     errorBuilder: (context, error, stackTrace) {
                       return const Icon(
                         Icons.school,

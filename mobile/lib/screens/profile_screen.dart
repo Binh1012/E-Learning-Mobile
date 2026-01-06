@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:email_validator/email_validator.dart';
 import 'dart:io';
 
 class ProfileScreen extends StatefulWidget {
@@ -97,7 +98,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
-    // Hiển thị dialog xác nhận
+    // Display confirmation dialog 
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -160,11 +161,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _isLoading = false;
     });
 
-    // Trả về dữ liệu đã cập nhật
+    // Return updated data
     if (mounted) {
       _showSuccessSnackBar('Profile updated successfully!');
       
-      // Delay để user thấy success message
+      // Delay so the user can see the success message 
       await Future.delayed(const Duration(milliseconds: 500));
       
       // Return updated data to previous screen
@@ -185,33 +186,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '9:30',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Icon(Icons.signal_cellular_4_bar, size: 18, color: Colors.black.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.wifi, size: 18, color: Colors.black.withOpacity(0.7)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.battery_full, size: 20, color: Colors.black.withOpacity(0.7)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
             // Title
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -372,9 +346,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           if (value == null || value.isEmpty) {
                             return 'Please enter your email';
                           }
-                          if (!value.contains('@')) {
+                          
+                          // Trim và validate
+                          final trimmedValue = value.trim();
+                          
+                          if (!EmailValidator.validate(trimmedValue)) {
                             return 'Please enter a valid email';
                           }
+                          
                           return null;
                         },
                       ),
@@ -467,10 +446,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 )
                               : Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    Icon(Icons.edit, size: 20),
-                                    SizedBox(width: 8),
-                                    Text(
+                                  children: [
+                                    const Icon(Icons.edit, size: 20),
+                                    const SizedBox(width: 8),
+                                    const Text(
                                       'Edit Profile',
                                       style: TextStyle(
                                         fontSize: 16,

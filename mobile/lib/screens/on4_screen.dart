@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'option_screen.dart';
+import 'package:mobile/widgets/dot_indicator.dart';
 
 class On4Screen extends StatelessWidget {
   const On4Screen({Key? key}) : super(key: key);
@@ -63,13 +64,13 @@ class On4Screen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildDot(false),
+                          const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          _buildDot(false),
+                          const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          _buildDot(false),
+                          const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          _buildDot(true),
+                          const DotWidget(isActive: true), 
                         ],
                       ),
                     ],
@@ -119,17 +120,6 @@ class On4Screen extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDot(bool isActive) {
-    return Container(
-      width: isActive ? 24 : 8,
-      height: 8,
-      decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF3DD598) : const Color(0xFFD1D5DB),
-        borderRadius: BorderRadius.circular(4),
       ),
     );
   }

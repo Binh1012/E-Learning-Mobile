@@ -104,7 +104,7 @@ class OptionScreen extends StatelessWidget {
                   // Skip Button
                   TextButton(
                     onPressed: () {
-                      Navigator.pushReplacement(
+                      Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (context) => const RegisterScreen(),
