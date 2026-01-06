@@ -5,12 +5,12 @@ import 'screens/splash_screen.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Thiết lập chế độ toàn màn hình
+  // Configure full-screen mode
   SystemChrome.setEnabledSystemUIMode(
     SystemUiMode.edgeToEdge,
   );
   
-  // Thiết lập màu status bar
+  // Configure status bar color
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
