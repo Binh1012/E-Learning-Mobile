@@ -3,6 +3,7 @@ import 'dart:io';
 import 'profile_screen.dart';
 import 'login_screen.dart';
 
+
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({Key? key}) : super(key: key);
 
@@ -13,7 +14,6 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  // List of screens
   final List<Widget> _screens = [
     const HomeTab(),
     const CoursesTab(),
@@ -96,23 +96,86 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab> {
+class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
+  late TabController _tabController;
+  int _currentTabIndex = 0;
+
+  final List<String> _tabs = ['Từ vựng', 'Ngữ pháp', 'Luyện nói'];
+
+  // Vocabulary Topics Data
+  final List<Map<String, dynamic>> _vocabularyTopics = [
+    {
+      'title': 'Basic Greetings',
+      'level': 'Beginner',
+      'progress': 0.75,
+      'lessons': 12,
+      'color': Color(0xFF3DD598),
+    },
+    {
+      'title': 'Family & Friends',
+      'level': 'Beginner',
+      'progress': 0.45,
+      'lessons': 8,
+      'color': Color(0xFFFF6B6B),
+    },
+    {
+      'title': 'Daily Activities',
+      'level': 'Intermediate',
+      'progress': 0.30,
+      'lessons': 15,
+      'color': Color(0xFF4ECDC4),
+    },
+    {
+      'title': 'Food & Drinks',
+      'level': 'Beginner',
+      'progress': 0.90,
+      'lessons': 10,
+      'color': Color(0xFF4ECDC4),
+    },
+    {
+      'title': 'Travel & Transport',
+      'level': 'Intermediate',
+      'progress': 0.60,
+      'lessons': 18,
+      'color': Color(0xFF3DD598),
+    },
+    {
+      'title': 'Work & Career',
+      'level': 'Advanced',
+      'progress': 0.20,
+      'lessons': 22,
+      'color': Color(0xFFFFB84D),
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      setState(() {
+        _currentTabIndex = _tabController.index;
+      });
+    });
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-           
             // Welcome Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -144,16 +207,16 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Search Bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Container(
-                height: 56,
+                height: 50,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF5F5F5),
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius: BorderRadius.circular(25),
                   border: Border.all(
                     color: const Color(0xFFE0E0E0),
                     width: 1,
@@ -165,50 +228,259 @@ class _HomeTabState extends State<HomeTab> {
                     hintText: 'Search',
                     hintStyle: TextStyle(
                       color: Colors.grey[500],
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w400,
                     ),
                     prefixIcon: Icon(
                       Icons.search,
                       color: Colors.grey[500],
-                      size: 24,
+                      size: 20,
                     ),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 20,
-                      vertical: 16,
+                      vertical: 14,
                     ),
                   ),
                 ),
               ),
             ),
 
-            // Content Area
-            Expanded(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.book_outlined,
-                      size: 80,
-                      color: Colors.grey[300],
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Your courses will appear here',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[500],
-                        fontWeight: FontWeight.w400,
+            const SizedBox(height: 20),
+
+            // Category Tabs
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Row(
+                children: List.generate(_tabs.length, (index) {
+                  final isActive = _currentTabIndex == index;
+                  return GestureDetector(
+                    onTap: () {
+                      _tabController.animateTo(index);
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive ? const Color(0xFF3DD598) : const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _tabs[index],
+                        style: TextStyle(
+                          color: isActive ? Colors.white : Colors.black,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ],
-                ),
+                  );
+                }),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Content
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildVocabularyTab(),
+                  _buildGrammarTab(),
+                  _buildSpeakingTab(),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildVocabularyTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.0),
+          child: Text(
+            'Vocabulary Topics',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            itemCount: _vocabularyTopics.length,
+            itemBuilder: (context, index) {
+              final topic = _vocabularyTopics[index];
+              return _buildTopicCard(topic);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTopicCard(Map<String, dynamic> topic) {
+    return GestureDetector(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFE9ECEF),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    topic['title'],
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: topic['color'],
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              topic['level'],
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Progress',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  '${(topic['progress'] * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: topic['progress'],
+                backgroundColor: const Color(0xFFE9ECEF),
+                valueColor: AlwaysStoppedAnimation<Color>(topic['color']),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${topic['lessons']} lessons',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  'Continue',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: topic['color'],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGrammarTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.book_outlined,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Grammar content coming soon',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpeakingTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.mic_outlined,
+            size: 80,
+            color: Colors.grey[300],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Speaking content coming soon',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -353,7 +625,6 @@ class _SettingTabState extends State<SettingTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            
             // Title
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20.0),
