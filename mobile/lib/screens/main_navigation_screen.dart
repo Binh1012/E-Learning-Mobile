@@ -17,8 +17,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   final List<Widget> _screens = [
     const HomeTab(),
-    const CoursesTab(),
-    const ExploreTab(),
+    const PracticeTab(),
+    const ProgressTab(),
     const SettingTab(),
   ];
 
@@ -31,37 +31,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+  return Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F1EB),
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(24),
+        topRight: Radius.circular(24),
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildNavItem(0, Icons.home, 'Home'),
-              _buildNavItem(1, Icons.menu_book_outlined, 'Courses'),
-              _buildNavItem(2, Icons.explore_outlined, 'Explore'),
-              _buildNavItem(3, Icons.person_outline, 'Setting'),
-            ],
-          ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, -2),
+        ),
+      ],
+    ),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildNavItem(0, Icons.home, 'Home'),
+            _buildNavItem(1, Icons.menu_book_outlined, 'Practice'),
+            _buildNavItem(2, Icons.explore_outlined, 'Progress'),
+            _buildNavItem(3, Icons.person_outline, 'Setting'),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final bool isActive = _currentIndex == index;
@@ -73,8 +74,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         });
       },
       child: Container(
-        width: 64,
-        height: 64,
+        width: 56,
+        height: 48,
         decoration: BoxDecoration(
           color: isActive ? const Color(0xFF3DD598) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
@@ -82,7 +83,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         child: Icon(
           icon,
           color: isActive ? Colors.white : const Color(0xFF9E9E9E),
-          size: 28,
+          size: 24,
         ),
       ),
     );
@@ -501,9 +502,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 }
 
-// Courses Tab (Placeholder)
-class CoursesTab extends StatelessWidget {
-  const CoursesTab({Key? key}) : super(key: key);
+// Practice Tab (Placeholder)
+class PracticeTab extends StatelessWidget {
+  const PracticeTab({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -511,7 +512,7 @@ class CoursesTab extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Courses',
+          'Practice',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -533,7 +534,7 @@ class CoursesTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Courses screen',
+              'Practice screen',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[500],
@@ -546,9 +547,9 @@ class CoursesTab extends StatelessWidget {
   }
 }
 
-// Explore Tab (Placeholder)
-class ExploreTab extends StatelessWidget {
-  const ExploreTab({Key? key}) : super(key: key);
+// Progress  Tab (Placeholder)
+class ProgressTab extends StatelessWidget {
+  const ProgressTab({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -556,7 +557,7 @@ class ExploreTab extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Explore',
+          'Progress',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -578,7 +579,7 @@ class ExploreTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Explore screen',
+              'Progress screen',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[500],
