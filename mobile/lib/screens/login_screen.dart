@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
-import 'main_navigation_screen.dart';
+import 'home_tab.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +17,36 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool rememberMe = false;
   bool obscurePassword = true;
+  bool isLoading = false;
+
+  Future<void> _handleLogin() async {
+    if (emailController.text.isEmpty ||
+        passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Vui lòng nhập email và mật khẩu")),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    // ===== GIẢ LẬP CALL API =====
+    await Future.delayed(const Duration(seconds: 1));
+
+    // ===== LƯU TOKEN (NHỚ ĐĂNG NHẬP) =====
+    if (rememberMe) {
+      await AuthService.saveToken("fake_jwt_token");
+    }
+
+    if (!mounted) return;
+
+    setState(() => isLoading = false);
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,9 +58,9 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ===== Title =====
                 const SizedBox(height: 40),
+
+                // ===== TITLE =====
                 const Center(
                   child: Text(
                     "Login",
@@ -50,34 +81,25 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 40),
 
-                // ===== Email =====
+                // ===== EMAIL =====
                 const Text("Email"),
                 const SizedBox(height: 8),
                 TextField(
                   controller: emailController,
-                  decoration: InputDecoration(
-                    hintText: "Enter your Email",
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: _inputDecoration("Enter your Email"),
                 ),
 
                 const SizedBox(height: 20),
 
-                // ===== Password =====
+                // ===== PASSWORD =====
                 const Text("Password"),
                 const SizedBox(height: 8),
                 TextField(
                   controller: passwordController,
                   obscureText: obscurePassword,
-                  decoration: InputDecoration(
-                    hintText: "Enter your Password",
-                    filled: true,
-                    fillColor: Colors.grey.shade100,
+                  decoration: _inputDecoration(
+                    "Enter your Password",
                     suffixIcon: IconButton(
                       icon: Icon(
                         obscurePassword
@@ -90,16 +112,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
                   ),
                 ),
 
                 const SizedBox(height: 10),
 
-                // ===== Remember & Forgot =====
+                // ===== REMEMBER & FORGOT =====
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -132,26 +150,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Login Button =====
+                // ===== LOGIN BUTTON =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
+                    onPressed: isLoading ? null : _handleLogin,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CD080),
+                      backgroundColor: const Color(0xFF3DD598),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
+                    child: isLoading
+                        ? const CircularProgressIndicator(
+                      color: Colors.white,
+                    )
+                        : const Text(
                       "Login",
                       style: TextStyle(fontSize: 16),
                     ),
@@ -174,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Google Login =====
+                // ===== GOOGLE LOGIN (UI ONLY) =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -195,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // ===== Sign Up =====
+                // ===== SIGN UP =====
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -225,6 +240,19 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint, {Widget? suffixIcon}) {
+    return InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.grey.shade100,
+      suffixIcon: suffixIcon,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
       ),
     );
   }
