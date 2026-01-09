@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'lesson_completed_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
@@ -23,12 +23,12 @@ class FlashcardScreen extends StatefulWidget {
 class _FlashcardScreenState extends State<FlashcardScreen> {
   int _currentIndex = 0;
   bool _showBack = false;
-  final FlutterTts _flutterTts = FlutterTts();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   
   // Track learned cards
   final Set<int> _learnedCards = {};
 
-  // Sample flashcard data
+  // Sample flashcard data with audio files
   final List<Map<String, String>> _flashcards = [
     {
       'word': 'Hello',
@@ -36,6 +36,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       'meaning': 'Xin chào',
       'exampleEn': 'Hello, how are you today?',
       'exampleVi': 'Xin chào, hôm nay bạn thế nào?',
+      'audio': 'audios/hello.mp3',
     },
     {
       'word': 'Goodbye',
@@ -43,6 +44,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       'meaning': 'Tạm biệt',
       'exampleEn': 'Goodbye, see you tomorrow!',
       'exampleVi': 'Tạm biệt, hẹn gặp lại ngày mai!',
+      'audio': 'audios/goodbye.mp3',
     },
     {
       'word': 'Thank you',
@@ -50,6 +52,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       'meaning': 'Cảm ơn',
       'exampleEn': 'Thank you for your help.',
       'exampleVi': 'Cảm ơn vì sự giúp đỡ của bạn.',
+      'audio': 'audios/thank_you.mp3',
     },
     {
       'word': 'Please',
@@ -57,6 +60,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       'meaning': 'Làm ơn',
       'exampleEn': 'Please pass me the salt.',
       'exampleVi': 'Làm ơn đưa tôi muối.',
+      'audio': 'audios/please.mp3',
     },
     {
       'word': 'Welcome',
@@ -64,30 +68,36 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
       'meaning': 'Chào mừng',
       'exampleEn': 'Welcome to our home!',
       'exampleVi': 'Chào mừng đến nhà chúng tôi!',
+      'audio': 'audios/welcome.mp3',
     },
   ];
 
   @override
   void initState() {
     super.initState();
-    _initTts();
-  }
-
-  Future<void> _initTts() async {
-    await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.5);
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(1.0);
   }
 
   @override
   void dispose() {
-    _flutterTts.stop();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
-  Future<void> _speak(String text) async {
-    await _flutterTts.speak(text);
+  Future<void> _playAudio() async {
+    try {
+      final currentCard = _flashcards[_currentIndex];
+      final audioPath = currentCard['audio'];
+      
+      if (audioPath != null && audioPath.isNotEmpty) {
+        // Stop any currently playing audio
+        await _audioPlayer.stop();
+        
+        // Play the audio file from assets
+        await _audioPlayer.play(AssetSource(audioPath));
+      }
+    } catch (e) {
+      print('Error playing audio: $e');
+    }
   }
 
   void _nextCard() {
@@ -298,7 +308,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
                             const SizedBox(height: 40),
                             // Play button
                             GestureDetector(
-                              onTap: () => _speak(currentCard['word']!),
+                              onTap: _playAudio,
                               child: Container(
                                 width: 64,
                                 height: 64,
