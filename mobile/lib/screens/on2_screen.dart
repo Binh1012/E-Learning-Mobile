@@ -29,7 +29,7 @@ class On2Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Embark on Your',
+                        'Learn TOEIC Vocabulary',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -39,7 +39,7 @@ class On2Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Learning Adventure',
+                        'By Topic',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -51,7 +51,7 @@ class On2Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Explore Interactive Lessons, Quizzes, And\nMultimedia Content To Enhance Your Understanding.',
+                        'Master Essential Vocabulary From Real TOEIC Topics \nSuch As Office, Travel, Marketing, And Business.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

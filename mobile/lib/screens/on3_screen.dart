@@ -29,7 +29,7 @@ class On3Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Engage with Expert',
+                        'Practice Smart',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -39,7 +39,7 @@ class On3Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Instructors',
+                        'Remember Longer',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -51,7 +51,7 @@ class On3Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Connect With Knowledgeable Tutors For\nPersonalized Guidance.',
+                        'Use Flashcards, Quizzes, And Exercises To Remember \nVocabulary And Apply It Correctly In TOEIC Contexts.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

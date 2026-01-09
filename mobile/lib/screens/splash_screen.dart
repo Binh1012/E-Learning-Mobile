@@ -13,8 +13,8 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Tự động chuyển sang On1Screen sau 2 giây
-    Timer(const Duration(seconds: 2), () {
+    // Tự động chuyển sang On1Screen sau 5 giây
+    Timer(const Duration(seconds: 5), () {
       if (mounted) {
         Navigator.pushReplacement(
           context,

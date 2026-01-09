@@ -28,7 +28,7 @@ class On1Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Enter the World of',
+                        'Personalize Your TOEIC',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -38,7 +38,7 @@ class On1Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'E-Learning',
+                        'Learning Path',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -50,7 +50,7 @@ class On1Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Begin Your Educational Journey With\nAccess To A Diverse Range Of Courses.',
+                        'Set Your Target TOEIC Score And Study Vocabulary \nTailored To Your Current Level.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'dart:math' as math;
 import 'lesson_completed_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
@@ -20,10 +21,14 @@ class FlashcardScreen extends StatefulWidget {
   State<FlashcardScreen> createState() => _FlashcardScreenState();
 }
 
-class _FlashcardScreenState extends State<FlashcardScreen> {
+class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   bool _showBack = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  
+  // Animation controller for flip effect
+  late AnimationController _flipController;
+  late Animation<double> _flipAnimation;
   
   // Track learned cards
   final Set<int> _learnedCards = {};
@@ -75,11 +80,25 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
   @override
   void initState() {
     super.initState();
+    
+    // Initialize flip animation
+    _flipController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    
+    _flipAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _flipController,
+        curve: Curves.easeInOut,
+      ),
+    );
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
+    _flipController.dispose();
     super.dispose();
   }
 
@@ -106,6 +125,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
         _currentIndex++;
         _showBack = false;
       });
+      // Reset flip animation
+      _flipController.reset();
     }
   }
 
@@ -115,13 +136,27 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
         _currentIndex--;
         _showBack = false;
       });
+      // Reset flip animation
+      _flipController.reset();
     }
   }
 
   void _toggleCard() {
-    setState(() {
-      _showBack = !_showBack;
-    });
+    if (_showBack) {
+      // Flip from back to front
+      _flipController.reverse().then((_) {
+        setState(() {
+          _showBack = false;
+        });
+      });
+    } else {
+      // Flip from front to back
+      _flipController.forward().then((_) {
+        setState(() {
+          _showBack = true;
+        });
+      });
+    }
   }
 
   void _toggleLearned() {
@@ -261,31 +296,49 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
 
             const SizedBox(height: 30),
 
-            // Flashcard
+            // Flashcard with 3D Flip Animation
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: GestureDetector(
-                  onTap: _toggleCard,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (!_showBack) ...[
+                child: AnimatedBuilder(
+                  animation: _flipAnimation,
+                  builder: (context, child) {
+                    // Calculate rotation angle
+                    final angle = _flipAnimation.value * math.pi; // π radians = 180 degrees
+                    
+                    // Determine which side to show based on rotation
+                    final isShowingFront = angle < (math.pi / 2);
+                    
+                    return Transform(
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001) // perspective
+                        ..rotateY(angle),
+                      alignment: Alignment.center,
+                      child: GestureDetector(
+                        onTap: _toggleCard,
+                        child: Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Transform(
+                            transform: Matrix4.identity()
+                              ..rotateY(isShowingFront ? 0 : math.pi), // Flip back side
+                            alignment: Alignment.center,
+                            child: Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (isShowingFront) ...[
                             // Front of card - Word
                             Text(
                               currentCard['word']!,
@@ -409,7 +462,11 @@ class _FlashcardScreenState extends State<FlashcardScreen> {
                   ),
                 ),
               ),
-            ),
+            );
+          },
+        ),
+      ),
+    ),
 
             const SizedBox(height: 30),
 
