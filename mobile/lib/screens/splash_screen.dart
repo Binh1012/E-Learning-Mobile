@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../services/auth_service.dart';
 import 'on1_screen.dart';
+import 'main_navigation_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -13,15 +15,34 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Tự động chuyển sang On1Screen sau 2 giây
-    Timer(const Duration(seconds: 2), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const On1Screen()),
-        );
-      }
-    });
+    _handleNavigation();
+  }
+
+  Future<void> _handleNavigation() async {
+    await Future.delayed(const Duration(seconds: 2));
+
+    final token = await AuthService.getToken();
+
+    if (!mounted) return;
+
+    // ✅ Có token → vào thẳng main
+    if (token != null && token.isNotEmpty) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+        ),
+      );
+    }
+    // ❌ Không có token → flow bình thường
+    else {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const On1Screen(),
+        ),
+      );
+    }
   }
 
   @override
@@ -35,7 +56,7 @@ class _SplashScreenState extends State<SplashScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.white, // Primary green color
+              Colors.white,
               Colors.white,
             ],
           ),
@@ -57,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen> {
                     width: 180,
                     height: 120,
                     fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
+                    errorBuilder: (_, __, ___) {
                       return const Icon(
                         Icons.school,
                         size: 100,
@@ -68,14 +89,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-              // Text "e-Learning"
               const Text(
                 'e-Learning',
                 style: TextStyle(
                   fontSize: 48,
                   fontWeight: FontWeight.w400,
                   color: Color(0xFF3DD598),
-                  letterSpacing: 0.5,
                 ),
               ),
             ],

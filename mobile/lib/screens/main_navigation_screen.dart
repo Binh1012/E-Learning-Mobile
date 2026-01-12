@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'profile_screen.dart';
 import 'login_screen.dart';
+import '../services/auth_service.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({Key? key}) : super(key: key);
@@ -600,14 +601,19 @@ class _SettingTabState extends State<SettingTab> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                // Navigate to LoginScreen
+              onPressed: () async {
+                Navigator.of(context).pop(); // đóng dialog
+
+                // ✅ XÓA TOKEN
+                await AuthService.logout();
+
+                if (!context.mounted) return;
+
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (context) => const LoginScreen(),
                   ),
-                  (route) => false,
+                      (route) => false,
                 );
               },
               child: const Text(
