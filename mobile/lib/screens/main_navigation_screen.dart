@@ -113,42 +113,42 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       'level': 'Beginner',
       'progress': 0.75,
       'lessons': 12,
-      'color': Color(0xFF3DD598),
-    },
-    {
-      'title': 'Family & Friends',
-      'level': 'Beginner',
-      'progress': 0.45,
-      'lessons': 8,
-      'color': Color(0xFFFF6B6B),
-    },
-    {
-      'title': 'Daily Activities',
-      'level': 'Intermediate',
-      'progress': 0.30,
-      'lessons': 15,
-      'color': Color(0xFF4ECDC4),
-    },
-    {
-      'title': 'Food & Drinks',
-      'level': 'Beginner',
-      'progress': 0.90,
-      'lessons': 10,
-      'color': Color(0xFF4ECDC4),
-    },
-    {
-      'title': 'Travel & Transport',
-      'level': 'Intermediate',
-      'progress': 0.60,
-      'lessons': 18,
-      'color': Color(0xFF3DD598),
-    },
-    {
-      'title': 'Work & Career',
-      'level': 'Advanced',
-      'progress': 0.20,
-      'lessons': 22,
-      'color': Color(0xFFFFB84D),
+      'color': const Color(0xFF3DD598),  
+    },  
+    {  
+      'title': 'Family & Friends',  
+      'level': 'Beginner',  
+      'progress': 0.45,  
+      'lessons': 8,  
+      'color': const Color(0xFFFF6B6B),  
+    },  
+    {  
+      'title': 'Daily Activities',  
+      'level': 'Intermediate',  
+      'progress': 0.30,  
+      'lessons': 15,  
+      'color': const Color(0xFF4ECDC4),  
+    },  
+    {  
+      'title': 'Food & Drinks',  
+      'level': 'Beginner',  
+      'progress': 0.90,  
+      'lessons': 10,  
+      'color': const Color(0xFF4ECDC4),  
+    },  
+    {  
+      'title': 'Travel & Transport',  
+      'level': 'Intermediate',  
+      'progress': 0.60,  
+      'lessons': 18,  
+      'color': const Color(0xFF3DD598),  
+    },  
+    {  
+      'title': 'Work & Career',  
+      'level': 'Advanced',  
+      'progress': 0.20,  
+      'lessons': 22,  
+      'color': const Color(0xFFFFB84D), 
     },
   ];
 
@@ -318,6 +318,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildVocabularyTab() {
+    //There will be a test to determine the level before choosing a topic, the feature will be updated later. ...
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
