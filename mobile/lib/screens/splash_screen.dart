@@ -53,9 +53,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
                 child: Center(
                   child: Image.asset(
-                    'assets/images/splash.png',
-                    width: 180,
-                    height: 120,
+                    'assets/images/Logo.png',
+                    width: 160,
+                    height: 160,
                     fit: BoxFit.contain,
                     errorBuilder: (context, error, stackTrace) {
                       return const Icon(
