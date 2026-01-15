@@ -266,62 +266,75 @@ class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
   }
 
   Widget _buildProgress() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                _isReviewMode ? 'Review Progress' : 'Progress',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Progress title + %
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _isReviewMode ? 'Review Progress' : 'Progress',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
               ),
-              Text(
-                '${(_progressValue * 100).toInt()}%',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
+            ),
+            Text(
+              '${(_progressValue * 100).toInt()}%',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: _progressValue,
-              backgroundColor: const Color(0xFFE0E0E0),
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
-              minHeight: 8,
             ),
+          ],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Progress bar
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: _progressValue,
+            backgroundColor: const Color(0xFFE0E0E0),
+            valueColor:
+                const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
+            minHeight: 8,
           ),
-          const SizedBox(height: 8),
-          Text(
-            _stepText,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
+        ),
+
+        const SizedBox(height: 8),
+
+        // Step text + learned text (same row)
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _stepText,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _isReviewMode ? 'All learned' : '$_learnedSteps learned',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF3DD598),
+            Text(
+              _isReviewMode ? 'All learned' : '$_learnedSteps learned',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF3DD598),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
 
   Widget _buildContent() {
     if (_isReviewMode) {
