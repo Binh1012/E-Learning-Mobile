@@ -379,7 +379,7 @@ class ReviewLessonScreen extends StatefulWidget {
 class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
   int _currentIndex = 0;
   bool _showBack = false;
-  final Set<int> _learnedCards = {};
+  late List<int> _cardMemoryLevels;
 
   final List<Map<String, String>> _flashcards = [
     {
@@ -419,6 +419,12 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
     },
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
+  }
+
   void _nextCard() {
     if (_currentIndex < _flashcards.length - 1) {
       setState(() {
@@ -443,121 +449,185 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
     });
   }
 
-  void _toggleLearned() {
+  void _setMemoryLevel(int level) {
     setState(() {
-      if (_learnedCards.contains(_currentIndex)) {
-        _learnedCards.remove(_currentIndex);
-      } else {
-        _learnedCards.add(_currentIndex);
-      }
+      _cardMemoryLevels[_currentIndex] = level;
     });
   }
 
-  bool get _allLearned => _learnedCards.length == _flashcards.length;
+  bool get _allLearned => _cardMemoryLevels.every((level) => level > 0);
 
-  double get _progressValue => _learnedCards.length / _flashcards.length;
+  double get _progressValue {
+    int ratedCards = _cardMemoryLevels.where((level) => level > 0).length;
+    return ratedCards / _flashcards.length;
+  }
+
+  Widget _buildRatingButton({
+    required String label,
+    required String sublabel,
+    required String emoji,
+    required int level,
+    required bool isSelected,
+    required Color borderColor,
+    required Color backgroundColor,
+    required Color textColor,
+  }) {
+    return GestureDetector(
+      onTap: () => _setMemoryLevel(level),
+      child: Container(
+        width: (MediaQuery.of(context).size.width - 50) / 2,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? borderColor.withOpacity(0.1) : backgroundColor,
+          border: Border.all(
+            color: isSelected ? borderColor : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(
+              emoji,
+              style: const TextStyle(fontSize: 24),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? borderColor : textColor,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 1),
+            Text(
+              sublabel,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final currentCard = _flashcards[_currentIndex];
-    final isLearned = _learnedCards.contains(_currentIndex);
+    final currentMemoryLevel = _cardMemoryLevels[_currentIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            /// HEADER
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Review Lesson',
-                      style: TextStyle(
-                        fontSize: 18,
+                      style: const TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.access_time, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {},
                   ),
                 ],
               ),
             ),
 
-            // Progress Section
+            /// PROGRESS
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      const Text(
+                        'Progress',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
                       Text(
-                        'Review Progress',
+                        '${(_progressValue * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: _progressValue,
+                    backgroundColor: const Color(0xFFE0E0E0),
+                    valueColor: const AlwaysStoppedAnimation(
+                      Color(0xFF3DD598),
+                    ),
+                    minHeight: 8,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Card ${_currentIndex + 1} of ${_flashcards.length}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
                         ),
                       ),
-                      if (_allLearned)
-                        const Text(
-                          'All learned',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF3DD598),
-                          ),
+                      Text(
+                        '${_cardMemoryLevels.where((level) => level > 0).length} learned',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF3DD598),
                         ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: _progressValue,
-                      backgroundColor: const Color(0xFFE0E0E0),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
-                      minHeight: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Card ${_currentIndex + 1} of ${_flashcards.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
-            // Flashcard
+            /// FLASHCARD
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: GestureDetector(
                   onTap: _toggleCard,
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity! > 0) {
+                      _previousCard();
+                    } else if (details.primaryVelocity! < 0) {
+                      _nextCard();
+                    }
+                  },
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -572,275 +642,180 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                       ],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(24.0),
+                      padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (!_showBack) ...[
-                            Flexible(
-                              child: Text(
-                                currentCard['word']!,
-                                style: const TextStyle(
-                                  fontSize: 42,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              currentCard['pronunciation']!,
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[600],
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 30),
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF3DD598),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow,
-                                color: Colors.white,
-                                size: 28,
-                              ),
-                            ),
-                            const SizedBox(height: 30),
-                            Text(
-                              'Tap to flip card',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ] else ...[
-                            Flexible(
-                              child: Text(
-                                currentCard['meaning']!,
-                                style: const TextStyle(
-                                  fontSize: 42,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              width: 50,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3DD598),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 30),
-                            Flexible(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    currentCard['exampleEn']!,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                        children: !_showBack
+                            ? [
+                                Text(
+                                  currentCard['word']!,
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.w700,
                                   ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    currentCard['exampleVi']!,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey[600],
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Navigation buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _currentIndex > 0 ? _previousCard : null,
-                      icon: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: _currentIndex > 0 ? Colors.black : Colors.grey[400],
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: _toggleLearned,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isLearned ? const Color(0xFF3DD598) : Colors.white,
-                          border: Border.all(
-                            color: const Color(0xFF3DD598),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isLearned ? 'Learned' : 'Mark as Learned',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: isLearned ? Colors.white : const Color(0xFF3DD598),
+                                  textAlign: TextAlign.center,
                                 ),
-                              ),
-                              if (isLearned) ...[
-                                const SizedBox(width: 6),
-                                const Icon(Icons.check, color: Colors.white, size: 16),
+                                const SizedBox(height: 12),
+                                Text(
+                                  currentCard['pronunciation']!,
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 40),
+                                Container(
+                                  width: 64,
+                                  height: 64,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF3DD598),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.play_arrow,
+                                    color: Colors.white,
+                                    size: 32,
+                                  ),
+                                ),
+                              ]
+                            : [
+                                Text(
+                                  currentCard['meaning']!,
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 24),
+                                Text(
+                                  currentCard['exampleEn']!,
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  currentCard['exampleVi']!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
                               ],
-                            ],
-                          ),
-                        ),
                       ),
                     ),
                   ),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _currentIndex < _flashcards.length - 1
-                          ? _nextCard
-                          : null,
-                      icon: Icon(
-                        Icons.arrow_forward_ios,
-                        color: _currentIndex < _flashcards.length - 1
-                            ? Colors.black
-                            : Colors.grey[400],
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Dot indicators
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_flashcards.length, (index) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: index == _currentIndex
-                          ? const Color(0xFF3DD598)
-                          : Colors.grey[300],
-                      shape: BoxShape.circle,
-                    ),
-                  );
-                }),
-              ),
-            ),
-
-            // Finish Review button
-            if (_allLearned)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20, 
-                  0, 
-                  20, 
-                  MediaQuery.of(context).padding.bottom + 16,
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3DD598),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            /// RATING & BUTTON
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Đánh giá mức độ ghi nhớ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Text(
-                          'Finish Review',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        _buildRatingButton(
+                          label: 'Không nhớ',
+                          sublabel: 'Cần học lại',
+                          emoji: '😔',
+                          level: 1,
+                          isSelected: currentMemoryLevel == 1,
+                          borderColor: Colors.grey,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.grey,
                         ),
-                        SizedBox(width: 6),
-                        Icon(Icons.check, size: 18),
+                        _buildRatingButton(
+                          label: 'Hơi nhớ',
+                          sublabel: 'Cần ôn tập',
+                          emoji: '🙂',
+                          level: 2,
+                          isSelected: currentMemoryLevel == 2,
+                          borderColor: Colors.orange,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.orange,
+                        ),
+                        _buildRatingButton(
+                          label: 'Nhớ khá',
+                          sublabel: 'Đã nắm vững',
+                          emoji: '😊',
+                          level: 3,
+                          isSelected: currentMemoryLevel == 3,
+                          borderColor: Colors.lightGreen,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.lightGreen,
+                        ),
+                        _buildRatingButton(
+                          label: 'Nhớ rất tốt',
+                          sublabel: 'Thước lường',
+                          emoji: '😍',
+                          level: 4,
+                          isSelected: currentMemoryLevel == 4,
+                          borderColor:
+                              const Color(0xFF3DD598),
+                          backgroundColor: Colors.white,
+                          textColor:
+                              const Color(0xFF3DD598),
+                        ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MainNavigationScreen(),
+                            ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3DD598),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Finish Review',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.check, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              )
-            else
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              ),
+            ),
           ],
         ),
       ),
