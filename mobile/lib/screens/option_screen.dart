@@ -37,7 +37,7 @@ class OptionScreen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Learning Potential',
+                        'TOEIC Potential',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -49,7 +49,7 @@ class OptionScreen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Your Gateway To Personalized Courses,\nAnd Guidance For Success.',
+                        'Your Gateway To Band-based Vocabulary \nLearning And Clear TOEIC Progress.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
