@@ -99,94 +99,105 @@ class _SpeakingHomeScreenState extends State<SpeakingHomeScreen> {
 
   /// 🔹 Card chi tiết từng âm (GIỐNG HÌNH)
   Widget _soundCard(Map sound) {
-    final double progress = sound['progress'];
-    final Color color = progressColor(progress);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.grey.shade200),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    sound['name'],
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SpeakingWordListScreen(
+                soundName: sound['name'],
+                words: sound['words'],
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Text('Progress',
-                      style: TextStyle(color: Colors.grey)),
-                  const Spacer(),
-                  Text(
-                    '${(progress * 100).toInt()}%',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: color,
+            ),
+          );
+        },
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                /// Title + status dot
+                Row(
+                  children: [
+                    Text(
+                      sound['name'],
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey.shade200,
-                color: color,
-                minHeight: 6,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Text(
-                    'Number word: ${sound['words'].length}',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Continue',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.w600,
+                    const Spacer(),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                /// Progress label
+                Row(
+                  children: [
+                    const Text(
+                      'Progress',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${(sound['progress'] * 100).toInt()}%',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 6),
+
+                /// Progress bar
+                LinearProgressIndicator(
+                  value: sound['progress'],
+                  backgroundColor: Colors.grey.shade200,
+                  color: Colors.green,
+                  minHeight: 6,
+                ),
+
+                const SizedBox(height: 12),
+
+                /// Footer
+                Row(
+                  children: [
+                    Text(
+                      'Number word: ${sound['words'].length}',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      'Continue',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-}
-Color progressColor(double progress) {
-  if (progress >= 0.7) {
-    return Colors.green;
-  } else if (progress >= 0.3) {
-    return Colors.orange;
-  } else {
-    return Colors.red;
   }
 }
