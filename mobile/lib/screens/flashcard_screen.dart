@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'lesson_completed_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
@@ -34,54 +36,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   late List<int> _cardMemoryLevels;
 
-  final List<Map<String, String>> _flashcards = [
-    {
-      'word': 'Hello',
-      'pronunciation': '/həˈloʊ/',
-      'meaning': 'Xin chào',
-      'exampleEn': 'Hello, how are you today?',
-      'exampleVi': 'Xin chào, hôm nay bạn thế nào?',
-      'audio': 'audios/hello.mp3',
-    },
-    {
-      'word': 'Goodbye',
-      'pronunciation': '/ˌɡʊdˈbaɪ/',
-      'meaning': 'Tạm biệt',
-      'exampleEn': 'Goodbye, see you tomorrow!',
-      'exampleVi': 'Tạm biệt, hẹn gặp lại ngày mai!',
-      'audio': 'audios/goodbye.mp3',
-    },
-    {
-      'word': 'Thank you',
-      'pronunciation': '/θæŋk juː/',
-      'meaning': 'Cảm ơn',
-      'exampleEn': 'Thank you for your help.',
-      'exampleVi': 'Cảm ơn vì sự giúp đỡ của bạn.',
-      'audio': 'audios/thank_you.mp3',
-    },
-    {
-      'word': 'Please',
-      'pronunciation': '/pliːz/',
-      'meaning': 'Làm ơn',
-      'exampleEn': 'Please pass me the salt.',
-      'exampleVi': 'Làm ơn đưa tôi muối.',
-      'audio': 'audios/please.mp3',
-    },
-    {
-      'word': 'Welcome',
-      'pronunciation': '/ˈwelkəm/',
-      'meaning': 'Chào mừng',
-      'exampleEn': 'Welcome to our home!',
-      'exampleVi': 'Chào mừng đến nhà chúng tôi!',
-      'audio': 'audios/welcome.mp3',
-    },
-  ];
+  List<Map<String, String>> _flashcards = [];
+  bool _isLoadingFlashcards = true;
+  String? _loadError;
+
+  // API Configuration
+  static const String API_BASE_URL = 'http://10.0.5.88:3000/api';
 
   @override
   void initState() {
     super.initState();
-
-    _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
 
     _flipController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -94,6 +58,56 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         curve: Curves.easeInOut,
       ),
     );
+
+    _loadVocabularyWords();
+  }
+
+  Future<void> _loadVocabularyWords() async {
+    setState(() {
+      _isLoadingFlashcards = true;
+      _loadError = null;
+    });
+
+    try {
+      // Fetch words from API filtered by topic and A1 level
+      final response = await http.get(
+        Uri.parse(
+          '$API_BASE_URL/words?topic=${Uri.encodeComponent(widget.topicTitle)}&limit=10',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final words = data['data'] as List;
+
+        final flashcards = words.map<Map<String, String>>((word) {
+          final entry = word['entry'] as Map<String, dynamic>? ?? {};
+          return {
+            'word': word['word']?.toString() ?? '',
+            'pronunciation': entry['phonetic']?.toString() ?? '',
+            'meaning': entry['word_vi']?.toString() ?? '',
+            'example': entry['example']?.toString() ?? '',
+            'audio': entry['audio']?.toString() ?? '',
+          };
+        }).toList();
+
+        setState(() {
+          _flashcards = flashcards;
+          _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
+          _isLoadingFlashcards = false;
+        });
+      } else {
+        setState(() {
+          _loadError = 'Không thể tải từ vựng (${response.statusCode})';
+          _isLoadingFlashcards = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loadError = 'Lỗi: $e';
+        _isLoadingFlashcards = false;
+      });
+    }
   }
 
   @override
@@ -106,11 +120,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   Future<void> _playAudio() async {
     try {
       final currentCard = _flashcards[_currentIndex];
-      final audioPath = currentCard['audio'];
+      final audioUrl = currentCard['audio'];
 
-      if (audioPath != null && audioPath.isNotEmpty) {
+      if (audioUrl != null && audioUrl.isNotEmpty) {
         await _audioPlayer.stop();
-        await _audioPlayer.play(AssetSource(audioPath));
+        // Check if it's a URL or local asset
+        if (audioUrl.startsWith('http')) {
+          await _audioPlayer.play(UrlSource(audioUrl));
+        } else {
+          await _audioPlayer.play(AssetSource(audioUrl));
+        }
       }
     } catch (e) {
       debugPrint('Error playing audio: $e');
@@ -173,6 +192,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           topicTitle: widget.topicTitle,
           cardsLearned: _flashcards.length,
           accuracy: 100,
+          flashcards: _flashcards,
+          cardMemoryLevels: _cardMemoryLevels,
         ),
       ),
     );
@@ -239,6 +260,163 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   @override
   Widget build(BuildContext context) {
+    // Show loading state
+    if (_isLoadingFlashcards) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation(Color(0xFF3DD598)),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Đang tải từ vựng...'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show error state
+    if (_loadError != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _loadError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _loadVocabularyWords,
+                        child: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state
+    if (_flashcards.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.inbox,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Không có từ vựng nào',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final currentCard = _flashcards[_currentIndex];
     final currentMemoryLevel = _cardMemoryLevels[_currentIndex];
 
@@ -379,7 +557,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                             alignment: Alignment.center,
                             child: Padding(
                               padding:
-                                  const EdgeInsets.all(32),
+                                  const EdgeInsets.all(20),
                               child: Column(
                                 mainAxisAlignment:
                                     MainAxisAlignment.center,
@@ -397,23 +575,23 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                               TextAlign.center,
                                         ),
                                         const SizedBox(
-                                            height: 12),
+                                            height: 8),
                                         Text(
                                           currentCard[
                                               'pronunciation']!,
                                           style: TextStyle(
-                                            fontSize: 18,
+                                            fontSize: 16,
                                             color: Colors
                                                 .grey[600],
                                           ),
                                         ),
                                         const SizedBox(
-                                            height: 40),
+                                            height: 24),
                                         GestureDetector(
                                           onTap: _playAudio,
                                           child: Container(
-                                            width: 64,
-                                            height: 64,
+                                            width: 60,
+                                            height: 60,
                                             decoration:
                                                 const BoxDecoration(
                                               color:
@@ -425,9 +603,52 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                               Icons.play_arrow,
                                               color:
                                                   Colors.white,
-                                              size: 32,
+                                              size: 28,
                                             ),
                                           ),
+                                        ),
+                                        const SizedBox(
+                                            height: 16),
+                                        const Text(
+                                          'Tap to flip card',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment
+                                                  .center,
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  const BoxDecoration(
+                                                color: Color(
+                                                    0xFF3DD598),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                width: 8),
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(
+                                                        0.3),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ]
                                     : [
@@ -443,24 +664,58 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                                               TextAlign.center,
                                         ),
                                         const SizedBox(
-                                            height: 24),
+                                            height: 16),
                                         Text(
                                           currentCard[
-                                              'exampleEn']!,
+                                              'example']!,
                                           textAlign:
                                               TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                          ),
                                         ),
                                         const SizedBox(
-                                            height: 8),
-                                        Text(
-                                          currentCard[
-                                              'exampleVi']!,
-                                          textAlign:
-                                              TextAlign.center,
+                                            height: 16),
+                                        const Text(
+                                          'Tap to flip back',
                                           style: TextStyle(
-                                            color: Colors
-                                                .grey[600],
+                                            fontSize: 12,
+                                            color: Colors.grey,
                                           ),
+                                        ),
+                                        const SizedBox(
+                                            height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment
+                                                  .center,
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(
+                                                        0.3),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                width: 8),
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  const BoxDecoration(
+                                                color: Color(
+                                                    0xFF3DD598),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                               ),

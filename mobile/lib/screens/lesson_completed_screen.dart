@@ -5,12 +5,16 @@ class LessonCompletedScreen extends StatelessWidget {
   final String topicTitle;
   final int cardsLearned;
   final int accuracy;
+  final List<Map<String, String>>? flashcards;
+  final List<int>? cardMemoryLevels;
 
   const LessonCompletedScreen({
     Key? key,
     required this.topicTitle,
     required this.cardsLearned,
     required this.accuracy,
+    this.flashcards,
+    this.cardMemoryLevels,
   }) : super(key: key);
 
   @override
@@ -23,13 +27,11 @@ class LessonCompletedScreen extends StatelessWidget {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.arrow_back),
                     onPressed: () {
                       Navigator.pushReplacement(
                         context,
@@ -39,13 +41,13 @@ class LessonCompletedScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Lesson Complete!',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                  Expanded(
+                    child: Text(
+                      topicTitle,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
@@ -96,8 +98,6 @@ class LessonCompletedScreen extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
 
                     const SizedBox(height: 24),
@@ -277,6 +277,8 @@ class LessonCompletedScreen extends StatelessWidget {
                         builder: (context) => ReviewLessonScreen(
                           topicTitle: topicTitle,
                           totalCards: cardsLearned,
+                          flashcards: flashcards ?? [],
+                          cardMemoryLevels: cardMemoryLevels ?? [],
                         ),
                       ),
                     );
@@ -365,11 +367,15 @@ class LessonCompletedScreen extends StatelessWidget {
 class ReviewLessonScreen extends StatefulWidget {
   final String topicTitle;
   final int totalCards;
+  final List<Map<String, String>> flashcards;
+  final List<int> cardMemoryLevels;
 
   const ReviewLessonScreen({
     Key? key,
     required this.topicTitle,
     required this.totalCards,
+    required this.flashcards,
+    required this.cardMemoryLevels,
   }) : super(key: key);
 
   @override
@@ -381,52 +387,17 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
   bool _showBack = false;
   late List<int> _cardMemoryLevels;
 
-  final List<Map<String, String>> _flashcards = [
-    {
-      'word': 'Hello',
-      'pronunciation': '/həˈloʊ/',
-      'meaning': 'Xin chào',
-      'exampleEn': 'Hello, how are you today?',
-      'exampleVi': 'Xin chào, hôm nay bạn thế nào?',
-    },
-    {
-      'word': 'Please',
-      'pronunciation': '/pliːz/',
-      'meaning': 'Làm ơn',
-      'exampleEn': 'Please pass me the salt.',
-      'exampleVi': 'Làm ơn đưa tôi muối.',
-    },
-    {
-      'word': 'Thank you',
-      'pronunciation': '/θæŋk juː/',
-      'meaning': 'Cảm ơn',
-      'exampleEn': 'Thank you for your help.',
-      'exampleVi': 'Cảm ơn vì sự giúp đỡ của bạn.',
-    },
-    {
-      'word': 'Goodbye',
-      'pronunciation': '/ˌɡʊdˈbaɪ/',
-      'meaning': 'Tạm biệt',
-      'exampleEn': 'Goodbye, see you tomorrow!',
-      'exampleVi': 'Tạm biệt, hẹn gặp lại ngày mai!',
-    },
-    {
-      'word': 'Welcome',
-      'pronunciation': '/ˈwelkəm/',
-      'meaning': 'Chào mừng',
-      'exampleEn': 'Welcome to our home!',
-      'exampleVi': 'Chào mừng đến nhà chúng tôi!',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
-    _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
+    // Use the passed memory levels or initialize empty if not provided
+    _cardMemoryLevels = widget.cardMemoryLevels.isNotEmpty
+        ? List<int>.from(widget.cardMemoryLevels)
+        : List<int>.filled(widget.flashcards.length, 0);
   }
 
   void _nextCard() {
-    if (_currentIndex < _flashcards.length - 1) {
+    if (_currentIndex < widget.flashcards.length - 1) {
       setState(() {
         _currentIndex++;
         _showBack = false;
@@ -459,7 +430,7 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
 
   double get _progressValue {
     int ratedCards = _cardMemoryLevels.where((level) => level > 0).length;
-    return ratedCards / _flashcards.length;
+    return ratedCards / widget.flashcards.length;
   }
 
   Widget _buildRatingButton({
@@ -522,7 +493,9 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentCard = _flashcards[_currentIndex];
+    final currentCard = widget.flashcards.isNotEmpty 
+        ? widget.flashcards[_currentIndex]
+        : {};
     final currentMemoryLevel = _cardMemoryLevels[_currentIndex];
 
     return Scaffold(
@@ -593,7 +566,7 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Card ${_currentIndex + 1} of ${_flashcards.length}',
+                        'Card ${_currentIndex + 1} of ${widget.flashcards.length}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
@@ -648,57 +621,41 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                         children: !_showBack
                             ? [
                                 Text(
-                                  currentCard['word']!,
+                                  currentCard['word'] ?? 'N/A',
                                   style: const TextStyle(
-                                    fontSize: 48,
+                                    fontSize: 32,
                                     fontWeight: FontWeight.w700,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  currentCard['pronunciation']!,
+                                  currentCard['pronunciation'] ?? '',
                                   style: TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     color: Colors.grey[600],
                                   ),
-                                ),
-                                const SizedBox(height: 40),
-                                Container(
-                                  width: 64,
-                                  height: 64,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF3DD598),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.play_arrow,
-                                    color: Colors.white,
-                                    size: 32,
-                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ]
                             : [
                                 Text(
-                                  currentCard['meaning']!,
+                                  currentCard['meaning'] ?? 'N/A',
                                   style: const TextStyle(
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF3DD598),
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 20),
                                 Text(
-                                  currentCard['exampleEn']!,
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  currentCard['exampleVi']!,
-                                  textAlign: TextAlign.center,
+                                  currentCard['example'] ?? '',
                                   style: TextStyle(
-                                    color: Colors.grey[600],
+                                    fontSize: 14,
+                                    color: Colors.grey[700],
                                   ),
+                                  textAlign: TextAlign.center,
                                 ),
                               ],
                       ),
@@ -765,11 +722,9 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                           emoji: '😍',
                           level: 4,
                           isSelected: currentMemoryLevel == 4,
-                          borderColor:
-                              const Color(0xFF3DD598),
+                          borderColor: Colors.blue,
                           backgroundColor: Colors.white,
-                          textColor:
-                              const Color(0xFF3DD598),
+                          textColor: Colors.blue,
                         ),
                       ],
                     ),
@@ -779,12 +734,7 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const MainNavigationScreen(),
-                            ),
-                          );
+                          Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF3DD598),
@@ -796,17 +746,14 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                         ),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'Finish Review',
+                              'Done',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            SizedBox(width: 8),
-                            Icon(Icons.check, size: 18),
                           ],
                         ),
                       ),
