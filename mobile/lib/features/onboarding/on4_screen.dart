@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'on4_screen.dart';
-import 'option_screen.dart';
+import '../auth/option_screen.dart';
 import 'package:mobile/widgets/dot_indicator.dart';
 
-class On3Screen extends StatelessWidget {
-  const On3Screen({Key? key}) : super(key: key);
+class On4Screen extends StatelessWidget {
+  const On4Screen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -22,14 +21,14 @@ class On3Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Illustration
                       Image.asset(
-                        'assets/images/on3.png',
+                        'assets/images/on4.png',
                         height: 260,
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Practice Smart',
+                        'Start Your TOEIC',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -39,7 +38,7 @@ class On3Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Remember Longer',
+                        'Journey',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -51,7 +50,7 @@ class On3Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Use Flashcards, Quizzes And Exercises To Remember\nVocabulary And Apply It Correctly In TOEIC Contexts.',
+                        'Follow A Clear Learning Path And Build Strong \nVocabulary To Achieve Your TOEIC Target Score.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -69,9 +68,9 @@ class On3Screen extends StatelessWidget {
                           const SizedBox(width: 8),
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: true),
+                          const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: false), 
+                          const DotWidget(isActive: true), 
                         ],
                       ),
                     ],
@@ -93,7 +92,7 @@ class On3Screen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const On4Screen(),
+                            builder: (context) => const OptionScreen(),
                           ),
                         );
                       },
@@ -116,26 +115,6 @@ class On3Screen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Skip Button
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const OptionScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      'SKIP',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6B7280),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

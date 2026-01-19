@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'main_navigation_screen.dart';
+import '../../navigation/main_navigation_screen.dart';
 
 class GrammarLessonScreen extends StatefulWidget {
   final String grammarTitle;

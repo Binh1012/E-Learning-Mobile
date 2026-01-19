@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'profile_screen.dart';
-import 'flashcard_screen.dart';
-import 'login_screen.dart';
-import 'grammar_lesson_screen.dart';
+import '../settings/profile_screen.dart';
+import '../home/vocab/flashcard_screen.dart';
+import '../auth/login_screen.dart';
+import '../home/grammar/grammar_lesson_screen.dart';
 
 
 class MainNavigationScreen extends StatefulWidget {
