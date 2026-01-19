@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'profile_screen.dart';
+import 'flashcard_screen.dart';
 import 'login_screen.dart';
+import 'grammar_lesson_screen.dart';
 
 
 class MainNavigationScreen extends StatefulWidget {
@@ -16,8 +20,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   final List<Widget> _screens = [
     const HomeTab(),
-    const CoursesTab(),
-    const ExploreTab(),
+    const PracticeTab(),
+    const ProgressTab(),
     const SettingTab(),
   ];
 
@@ -30,37 +34,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
+  return Container(
+    decoration: BoxDecoration(
+      color: const Color(0xFFF2F1EB),
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(24),
+        topRight: Radius.circular(24),
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _buildNavItem(0, Icons.home, 'Home'),
-              _buildNavItem(1, Icons.menu_book_outlined, 'Courses'),
-              _buildNavItem(2, Icons.explore_outlined, 'Explore'),
-              _buildNavItem(3, Icons.person_outline, 'Setting'),
-            ],
-          ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, -2),
+        ),
+      ],
+    ),
+    child: SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildNavItem(0, Icons.home, 'Home'),
+            _buildNavItem(1, Icons.menu_book_outlined, 'Practice'),
+            _buildNavItem(2, Icons.explore_outlined, 'Progress'),
+            _buildNavItem(3, Icons.person_outline, 'Setting'),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildNavItem(int index, IconData icon, String label) {
     final bool isActive = _currentIndex == index;
@@ -72,8 +77,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         });
       },
       child: Container(
-        width: 64,
-        height: 64,
+        width: 56,
+        height: 48,
         decoration: BoxDecoration(
           color: isActive ? const Color(0xFF3DD598) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
@@ -81,7 +86,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         child: Icon(
           icon,
           color: isActive ? Colors.white : const Color(0xFF9E9E9E),
-          size: 28,
+          size: 24,
         ),
       ),
     );
@@ -103,51 +108,13 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   final List<String> _tabs = ['Từ vựng', 'Ngữ pháp', 'Luyện nói'];
 
-  // Vocabulary Topics Data
-  final List<Map<String, dynamic>> _vocabularyTopics = [
-    {
-      'title': 'Basic Greetings',
-      'level': 'Beginner',
-      'progress': 0.75,
-      'lessons': 12,
-      'color': const Color(0xFF3DD598),  
-    },  
-    {  
-      'title': 'Family & Friends',  
-      'level': 'Beginner',  
-      'progress': 0.45,  
-      'lessons': 8,  
-      'color': const Color(0xFFFF6B6B),  
-    },  
-    {  
-      'title': 'Daily Activities',  
-      'level': 'Intermediate',  
-      'progress': 0.30,  
-      'lessons': 15,  
-      'color': const Color(0xFF4ECDC4),  
-    },  
-    {  
-      'title': 'Food & Drinks',  
-      'level': 'Beginner',  
-      'progress': 0.90,  
-      'lessons': 10,  
-      'color': const Color(0xFF4ECDC4),  
-    },  
-    {  
-      'title': 'Travel & Transport',  
-      'level': 'Intermediate',  
-      'progress': 0.60,  
-      'lessons': 18,  
-      'color': const Color(0xFF3DD598),  
-    },  
-    {  
-      'title': 'Work & Career',  
-      'level': 'Advanced',  
-      'progress': 0.20,  
-      'lessons': 22,  
-      'color': const Color(0xFFFFB84D), 
-    },
-  ];
+  // API Configuration
+  static const String API_BASE_URL = 'http://10.0.5.88:3000/api';
+  
+  // Vocabulary Topics Data (loaded from API)
+  List<Map<String, dynamic>> _vocabularyTopics = [];
+  bool _isLoadingTopics = true;
+  String? _topicsError;
 
   @override
   void initState() {
@@ -158,6 +125,66 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         _currentTabIndex = _tabController.index;
       });
     });
+    
+    // Load topics from API
+    _loadVocabularyTopics();
+  }
+
+  Future<void> _loadVocabularyTopics() async {
+    setState(() {
+      _isLoadingTopics = true;
+      _topicsError = null;
+    });
+
+    try {
+      final response = await http.get(Uri.parse('$API_BASE_URL/topics'));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final topics = data['data'] as List;
+        
+        // Map API topics to UI format with colors
+        final colors = [
+          const Color(0xFF3DD598),
+          const Color(0xFFFF6B6B),
+          const Color(0xFF4ECDC4),
+          const Color(0xFFFFB84D),
+          const Color(0xFF9B59B6),
+          const Color(0xFF3498DB),
+        ];
+        
+        setState(() {
+          _vocabularyTopics = topics.asMap().entries.map((entry) {
+            final index = entry.key;
+            final topic = entry.value;
+            return {
+              'title': topic['topic'],
+              'level': _getTopicLevel(topic['count']), // Determine level by count
+              'progress': 0.0, // Initial progress
+              'lessons': topic['count'],
+              'color': colors[index % colors.length],
+            };
+          }).toList();
+          _isLoadingTopics = false;
+        });
+      } else {
+        setState(() {
+          _topicsError = 'Failed to load topics: ${response.statusCode}';
+          _isLoadingTopics = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _topicsError = 'Error loading topics: $e';
+        _isLoadingTopics = false;
+      });
+    }
+  }
+  
+  String _getTopicLevel(int wordCount) {
+    if (wordCount > 50) return 'Advanced';
+    if (wordCount > 20) return 'Intermediate';
+    return 'Beginner';
   }
 
   @override
@@ -167,7 +194,20 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     super.dispose();
   }
 
-  
+  void _navigateToFlashcard(Map<String, dynamic> topic) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FlashcardScreen(
+          topicTitle: topic['title'],
+          topicLevel: topic['level'],
+          totalLessons: topic['lessons'],
+          progress: topic['progress'],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -303,6 +343,108 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   Widget _buildVocabularyTab() {
     //There will be a test to determine the level before choosing a topic, the feature will be updated later. ...
+    
+    // Loading state
+    if (_isLoadingTopics) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: Color(0xFF3DD598),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Loading topics...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Error state
+    if (_topicsError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: Colors.red[300],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load topics',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Text(
+                _topicsError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadVocabularyTopics,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3DD598),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Empty state
+    if (_vocabularyTopics.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.library_books_outlined,
+              size: 64,
+              color: Colors.grey,
+            ),
+            SizedBox(height: 16),
+            Text(
+              'No topics available',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // Success state - display topics
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -319,13 +461,17 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         ),
         const SizedBox(height: 16),
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            itemCount: _vocabularyTopics.length,
-            itemBuilder: (context, index) {
-              final topic = _vocabularyTopics[index];
-              return _buildTopicCard(topic);
-            },
+          child: RefreshIndicator(
+            onRefresh: _loadVocabularyTopics,
+            color: const Color(0xFF3DD598),
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              itemCount: _vocabularyTopics.length,
+              itemBuilder: (context, index) {
+                final topic = _vocabularyTopics[index];
+                return _buildTopicCard(topic);
+              },
+            ),
           ),
         ),
       ],
@@ -334,9 +480,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
   Widget _buildTopicCard(Map<String, dynamic> topic) {
     return GestureDetector(
-      onTap: () {
-        // Handle topic card tap
-      },
+      onTap: () => _navigateToFlashcard(topic),
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(20),
@@ -444,24 +588,223 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildGrammarTab() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.book_outlined,
-            size: 80,
-            color: Colors.grey[300],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Grammar content coming soon',
+    // Grammar Points Data
+    final List<Map<String, dynamic>> grammarPoints = [
+      {
+        'title': 'Present Simple Tense',
+        'description': 'Learn basic present tense usage',
+        'level': 'Beginner',
+        'progress': 0.85,
+        'lessons': 10,
+        'color': Color(0xFF3DD598),
+      },
+      {
+        'title': 'Past Simple Tense',
+        'description': 'Understanding past actions',
+        'level': 'Beginner',
+        'progress': 0.60,
+        'lessons': 12,
+        'color': Color(0xFFFF6B6B),
+      },
+      {
+        'title': 'Future Tense',
+        'description': 'Express future plans',
+        'level': 'Intermediate',
+        'progress': 0.40,
+        'lessons': 14,
+        'color': Color(0xFF4ECDC4),
+      },
+      {
+        'title': 'Present Continuous',
+        'description': 'Actions happening now',
+        'level': 'Beginner',
+        'progress': 0.75,
+        'lessons': 8,
+        'color': Color(0xFFFFB84D),
+      },
+      {
+        'title': 'Modal Verbs',
+        'description': 'Can, could, should, must',
+        'level': 'Intermediate',
+        'progress': 0.50,
+        'lessons': 15,
+        'color': Color(0xFF9B59B6),
+      },
+      {
+        'title': 'Conditional Sentences',
+        'description': 'If clauses and conditions',
+        'level': 'Advanced',
+        'progress': 0.30,
+        'lessons': 18,
+        'color': Color(0xFF3498DB),
+      },
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.0),
+          child: Text(
+            'Grammar Points',
             style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey[500],
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: Colors.black,
             ),
           ),
-        ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 20.0),
+            itemCount: grammarPoints.length,
+            itemBuilder: (context, index) {
+              final point = grammarPoints[index];
+              return _buildGrammarCard(point);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGrammarCard(Map<String, dynamic> point) {
+    return GestureDetector(
+      onTap: () {
+        // Navigate to Grammar Lesson Screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => GrammarLessonScreen(
+              grammarTitle: point['title'],
+              grammarLevel: point['level'],
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8F9FA),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFFE9ECEF),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Title row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    point['title'],
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: point['color'],
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Description
+            Text(
+              point['description'],
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 8),
+            
+            // Level
+            Text(
+              point['level'],
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Progress row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Progress',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  '${(point['progress'] * 100).toInt()}%',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            // Progress bar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: point['progress'],
+                backgroundColor: const Color(0xFFE9ECEF),
+                valueColor: AlwaysStoppedAnimation<Color>(point['color']),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Bottom row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${point['lessons']} lessons',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  'Continue',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: point['color'],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -490,9 +833,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 }
 
-// Courses Tab (Placeholder)
-class CoursesTab extends StatelessWidget {
-  const CoursesTab({Key? key}) : super(key: key);
+// Practice Tab (Placeholder)
+class PracticeTab extends StatelessWidget {
+  const PracticeTab({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -500,7 +843,7 @@ class CoursesTab extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Courses',
+          'Practice',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -522,7 +865,7 @@ class CoursesTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Courses screen',
+              'Practice screen',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[500],
@@ -535,9 +878,9 @@ class CoursesTab extends StatelessWidget {
   }
 }
 
-// Explore Tab (Placeholder)
-class ExploreTab extends StatelessWidget {
-  const ExploreTab({Key? key}) : super(key: key);
+// Progress  Tab (Placeholder)
+class ProgressTab extends StatelessWidget {
+  const ProgressTab({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -545,7 +888,7 @@ class ExploreTab extends StatelessWidget {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
-          'Explore',
+          'Progress',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w700,
@@ -567,7 +910,7 @@ class ExploreTab extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Explore screen',
+              'Progress screen',
               style: TextStyle(
                 fontSize: 16,
                 color: Colors.grey[500],

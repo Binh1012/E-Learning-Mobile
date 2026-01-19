@@ -28,7 +28,7 @@ class On4Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Personalize Your',
+                        'Start Your TOEIC',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -38,7 +38,7 @@ class On4Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Learning Path',
+                        'Journey',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -50,7 +50,7 @@ class On4Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Customize Your Learning With Progress\nTracking, And Interactive Activities.',
+                        'Follow A Clear Learning Path And Build Strong \nVocabulary To Achieve Your TOEIC Target Score.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,

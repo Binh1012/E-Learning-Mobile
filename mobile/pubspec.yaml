@@ -36,6 +36,8 @@ dependencies:
   cupertino_icons: ^1.0.8
   email_validator: ^3.0.0
   image_picker: ^1.2.1
+  audioplayers: ^5.2.1
+
 
 dev_dependencies:
   flutter_test:
@@ -92,3 +94,4 @@ flutter:
   # see https://flutter.dev/to/font-from-package
   assets:
     - assets/images/
+    - assets/audios/
