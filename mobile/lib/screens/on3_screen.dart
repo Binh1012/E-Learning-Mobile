@@ -51,7 +51,7 @@ class On3Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Use Flashcards, Quizzes, And Exercises To Remember \nVocabulary And Apply It Correctly In TOEIC Contexts.',
+                        'Use Flashcards, Quizzes And Exercises To Remember\nVocabulary And Apply It Correctly In TOEIC Contexts.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -71,7 +71,7 @@ class On3Screen extends StatelessWidget {
                           const SizedBox(width: 8),
                           const DotWidget(isActive: true),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: false), 
+                          const DotWidget(isActive: false),
                         ],
                       ),
                     ],

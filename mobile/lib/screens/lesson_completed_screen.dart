@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'main_navigation_screen.dart';
 
-
 class LessonCompletedScreen extends StatelessWidget {
   final String topicTitle;
   final int cardsLearned;
   final int accuracy;
+  final List<Map<String, String>>? flashcards;
+  final List<int>? cardMemoryLevels;
 
   const LessonCompletedScreen({
     Key? key,
     required this.topicTitle,
     required this.cardsLearned,
     required this.accuracy,
+    this.flashcards,
+    this.cardMemoryLevels,
   }) : super(key: key);
 
   @override
@@ -24,13 +27,11 @@ class LessonCompletedScreen extends StatelessWidget {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.arrow_back),
                     onPressed: () {
                       Navigator.pushReplacement(
                         context,
@@ -40,13 +41,13 @@ class LessonCompletedScreen extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Lesson Complete!',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                  Expanded(
+                    child: Text(
+                      topicTitle,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
@@ -97,8 +98,6 @@ class LessonCompletedScreen extends StatelessWidget {
                         color: Colors.grey[600],
                       ),
                       textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
 
                     const SizedBox(height: 24),
@@ -250,9 +249,9 @@ class LessonCompletedScreen extends StatelessWidget {
       // Bottom buttons
       bottomNavigationBar: Container(
         padding: EdgeInsets.fromLTRB(
-          16, 
-          12, 
-          16, 
+          16,
+          12,
+          16,
           MediaQuery.of(context).padding.bottom + 12,
         ),
         decoration: BoxDecoration(
@@ -278,6 +277,8 @@ class LessonCompletedScreen extends StatelessWidget {
                         builder: (context) => ReviewLessonScreen(
                           topicTitle: topicTitle,
                           totalCards: cardsLearned,
+                          flashcards: flashcards ?? [],
+                          cardMemoryLevels: cardMemoryLevels ?? [],
                         ),
                       ),
                     );
@@ -366,11 +367,15 @@ class LessonCompletedScreen extends StatelessWidget {
 class ReviewLessonScreen extends StatefulWidget {
   final String topicTitle;
   final int totalCards;
+  final List<Map<String, String>> flashcards;
+  final List<int> cardMemoryLevels;
 
   const ReviewLessonScreen({
     Key? key,
     required this.topicTitle,
     required this.totalCards,
+    required this.flashcards,
+    required this.cardMemoryLevels,
   }) : super(key: key);
 
   @override
@@ -380,48 +385,19 @@ class ReviewLessonScreen extends StatefulWidget {
 class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
   int _currentIndex = 0;
   bool _showBack = false;
-  final Set<int> _learnedCards = {};
+  late List<int> _cardMemoryLevels;
 
-  final List<Map<String, String>> _flashcards = [
-    {
-      'word': 'Hello',
-      'pronunciation': '/həˈloʊ/',
-      'meaning': 'Xin chào',
-      'exampleEn': 'Hello, how are you today?',
-      'exampleVi': 'Xin chào, hôm nay bạn thế nào?',
-    },
-    {
-      'word': 'Please',
-      'pronunciation': '/pliːz/',
-      'meaning': 'Làm ơn',
-      'exampleEn': 'Please pass me the salt.',
-      'exampleVi': 'Làm ơn đưa tôi muối.',
-    },
-    {
-      'word': 'Thank you',
-      'pronunciation': '/θæŋk juː/',
-      'meaning': 'Cảm ơn',
-      'exampleEn': 'Thank you for your help.',
-      'exampleVi': 'Cảm ơn vì sự giúp đỡ của bạn.',
-    },
-    {
-      'word': 'Goodbye',
-      'pronunciation': '/ˌɡʊdˈbaɪ/',
-      'meaning': 'Tạm biệt',
-      'exampleEn': 'Goodbye, see you tomorrow!',
-      'exampleVi': 'Tạm biệt, hẹn gặp lại ngày mai!',
-    },
-    {
-      'word': 'Welcome',
-      'pronunciation': '/ˈwelkəm/',
-      'meaning': 'Chào mừng',
-      'exampleEn': 'Welcome to our home!',
-      'exampleVi': 'Chào mừng đến nhà chúng tôi!',
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Use the passed memory levels or initialize empty if not provided
+    _cardMemoryLevels = widget.cardMemoryLevels.isNotEmpty
+        ? List<int>.from(widget.cardMemoryLevels)
+        : List<int>.filled(widget.flashcards.length, 0);
+  }
 
   void _nextCard() {
-    if (_currentIndex < _flashcards.length - 1) {
+    if (_currentIndex < widget.flashcards.length - 1) {
       setState(() {
         _currentIndex++;
         _showBack = false;
@@ -444,121 +420,187 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
     });
   }
 
-  void _toggleLearned() {
+  void _setMemoryLevel(int level) {
     setState(() {
-      if (_learnedCards.contains(_currentIndex)) {
-        _learnedCards.remove(_currentIndex);
-      } else {
-        _learnedCards.add(_currentIndex);
-      }
+      _cardMemoryLevels[_currentIndex] = level;
     });
   }
 
-  bool get _allLearned => _learnedCards.length == _flashcards.length;
+  bool get _allLearned => _cardMemoryLevels.every((level) => level > 0);
 
-  double get _progressValue => _learnedCards.length / _flashcards.length;
+  double get _progressValue {
+    int ratedCards = _cardMemoryLevels.where((level) => level > 0).length;
+    return ratedCards / widget.flashcards.length;
+  }
+
+  Widget _buildRatingButton({
+    required String label,
+    required String sublabel,
+    required String emoji,
+    required int level,
+    required bool isSelected,
+    required Color borderColor,
+    required Color backgroundColor,
+    required Color textColor,
+  }) {
+    return GestureDetector(
+      onTap: () => _setMemoryLevel(level),
+      child: Container(
+        width: (MediaQuery.of(context).size.width - 50) / 2,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? borderColor.withOpacity(0.1) : backgroundColor,
+          border: Border.all(
+            color: isSelected ? borderColor : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(
+              emoji,
+              style: const TextStyle(fontSize: 24),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? borderColor : textColor,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 1),
+            Text(
+              sublabel,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentCard = _flashcards[_currentIndex];
-    final isLearned = _learnedCards.contains(_currentIndex);
+    final currentCard = widget.flashcards.isNotEmpty
+        ? widget.flashcards[_currentIndex]
+        : {};
+    final currentMemoryLevel = _cardMemoryLevels[_currentIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            /// HEADER
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.pop(context),
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Review Lesson',
-                      style: TextStyle(
-                        fontSize: 18,
+                      style: const TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.access_time, color: Colors.black),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {},
                   ),
                 ],
               ),
             ),
 
-            // Progress Section
+            /// PROGRESS
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      const Text(
+                        'Progress',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
                       Text(
-                        'Review Progress',
+                        '${(_progressValue * 100).toStringAsFixed(0)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: _progressValue,
+                    backgroundColor: const Color(0xFFE0E0E0),
+                    valueColor: const AlwaysStoppedAnimation(
+                      Color(0xFF3DD598),
+                    ),
+                    minHeight: 8,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Card ${_currentIndex + 1} of ${widget.flashcards.length}',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[600],
                         ),
                       ),
-                      if (_allLearned)
-                        const Text(
-                          'All learned',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF3DD598),
-                          ),
+                      Text(
+                        '${_cardMemoryLevels.where((level) => level > 0).length} learned',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF3DD598),
                         ),
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: _progressValue,
-                      backgroundColor: const Color(0xFFE0E0E0),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
-                      minHeight: 8,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Card ${_currentIndex + 1} of ${_flashcards.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
-                    ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
 
-            // Flashcard
+            /// FLASHCARD
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: GestureDetector(
                   onTap: _toggleCard,
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity! > 0) {
+                      _previousCard();
+                    } else if (details.primaryVelocity! < 0) {
+                      _nextCard();
+                    }
+                  },
                   child: Container(
                     width: double.infinity,
                     decoration: BoxDecoration(
@@ -573,108 +615,48 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
                       ],
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(24.0),
+                      padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (!_showBack) ...[
-                            Flexible(
-                              child: Text(
-                                currentCard['word']!,
-                                style: const TextStyle(
-                                  fontSize: 42,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                        children: !_showBack
+                            ? [
+                          Text(
+                            currentCard['word'] ?? 'N/A',
+                            style: const TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              currentCard['pronunciation']!,
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey[600],
-                              ),
-                              textAlign: TextAlign.center,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            currentCard['pronunciation'] ?? '',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey[600],
                             ),
-                            const SizedBox(height: 30),
-                            Container(
-                              width: 56,
-                              height: 56,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF3DD598),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow,
-                                color: Colors.white,
-                                size: 28,
-                              ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ]
+                            : [
+                          Text(
+                            currentCard['meaning'] ?? 'N/A',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF3DD598),
                             ),
-                            const SizedBox(height: 30),
-                            Text(
-                              'Tap to flip card',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[500],
-                              ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            currentCard['example'] ?? '',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[700],
                             ),
-                          ] else ...[
-                            Flexible(
-                              child: Text(
-                                currentCard['meaning']!,
-                                style: const TextStyle(
-                                  fontSize: 42,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.black,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              width: 50,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3DD598),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 30),
-                            Flexible(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    currentCard['exampleEn']!,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.black,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    currentCard['exampleVi']!,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey[600],
-                                    ),
-                                    textAlign: TextAlign.center,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                            textAlign: TextAlign.center,
+                          ),
                         ],
                       ),
                     ),
@@ -683,165 +665,104 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
 
-            // Navigation buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _currentIndex > 0 ? _previousCard : null,
-                      icon: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: _currentIndex > 0 ? Colors.black : Colors.grey[400],
-                        size: 18,
+            /// RATING & BUTTON
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Đánh giá mức độ ghi nhớ',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-                  Flexible(
-                    child: GestureDetector(
-                      onTap: _toggleLearned,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isLearned ? const Color(0xFF3DD598) : Colors.white,
-                          border: Border.all(
-                            color: const Color(0xFF3DD598),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                isLearned ? 'Learned' : 'Mark as Learned',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: isLearned ? Colors.white : const Color(0xFF3DD598),
-                                ),
-                              ),
-                              if (isLearned) ...[
-                                const SizedBox(width: 6),
-                                const Icon(Icons.check, color: Colors.white, size: 16),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      onPressed: _currentIndex < _flashcards.length - 1
-                          ? _nextCard
-                          : null,
-                      icon: Icon(
-                        Icons.arrow_forward_ios,
-                        color: _currentIndex < _flashcards.length - 1
-                            ? Colors.black
-                            : Colors.grey[400],
-                        size: 18,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Dot indicators
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_flashcards.length, (index) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: index == _currentIndex
-                          ? const Color(0xFF3DD598)
-                          : Colors.grey[300],
-                      shape: BoxShape.circle,
-                    ),
-                  );
-                }),
-              ),
-            ),
-
-            // Finish Review button
-            if (_allLearned)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  20, 
-                  0, 
-                  20, 
-                  MediaQuery.of(context).padding.bottom + 16,
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationScreen(),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3DD598),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        Text(
-                          'Finish Review',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        _buildRatingButton(
+                          label: 'Không nhớ',
+                          sublabel: 'Cần học lại',
+                          emoji: '😔',
+                          level: 1,
+                          isSelected: currentMemoryLevel == 1,
+                          borderColor: Colors.grey,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.grey,
                         ),
-                        SizedBox(width: 6),
-                        Icon(Icons.check, size: 18),
+                        _buildRatingButton(
+                          label: 'Hơi nhớ',
+                          sublabel: 'Cần ôn tập',
+                          emoji: '🙂',
+                          level: 2,
+                          isSelected: currentMemoryLevel == 2,
+                          borderColor: Colors.orange,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.orange,
+                        ),
+                        _buildRatingButton(
+                          label: 'Nhớ khá',
+                          sublabel: 'Đã nắm vững',
+                          emoji: '😊',
+                          level: 3,
+                          isSelected: currentMemoryLevel == 3,
+                          borderColor: Colors.lightGreen,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.lightGreen,
+                        ),
+                        _buildRatingButton(
+                          label: 'Nhớ rất tốt',
+                          sublabel: 'Thước lường',
+                          emoji: '😍',
+                          level: 4,
+                          isSelected: currentMemoryLevel == 4,
+                          borderColor: Colors.blue,
+                          backgroundColor: Colors.white,
+                          textColor: Colors.blue,
+                        ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3DD598),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Done',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
-              )
-            else
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              ),
+            ),
           ],
         ),
       ),
