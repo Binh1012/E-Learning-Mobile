@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../../../core/services/vocabulary_api_service.dart';
 import '../../vocab/flashcard_screen.dart';
 
 class VocabularyTab extends StatefulWidget {
@@ -11,10 +10,6 @@ class VocabularyTab extends StatefulWidget {
 }
 
 class _VocabularyTabState extends State<VocabularyTab> {
-  // API Configuration
-  static const String API_BASE_URL = 'http://10.0.5.88:3000/api';
-  
-  // Vocabulary Topics Data (loaded from API)
   List<Map<String, dynamic>> _vocabularyTopics = [];
   bool _isLoadingTopics = true;
   String? _topicsError;
@@ -32,13 +27,11 @@ class _VocabularyTabState extends State<VocabularyTab> {
     });
 
     try {
-      final response = await http.get(Uri.parse('$API_BASE_URL/topics'));
+      final response = await VocabularyApiService.getTopics();
       
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final topics = data['data'] as List;
+      if (response['statusCode'] == 200) {
+        final topics = response['data'] as List;
         
-        // Map API topics to UI format with colors
         final colors = [
           const Color(0xFF3DD598),
           const Color(0xFFFF6B6B),
@@ -52,11 +45,18 @@ class _VocabularyTabState extends State<VocabularyTab> {
           _vocabularyTopics = topics.asMap().entries.map((entry) {
             final index = entry.key;
             final topic = entry.value;
+            final totalWords = topic['totalWords'] ?? 0;
+            final learnedCount = topic['learnedCount'] ?? 0;
+            final progressPercent = topic['progressPercentage'] ?? 0.0;
+            
             return {
-              'title': topic['topic'],
-              'level': _getTopicLevel(topic['count']),
-              'progress': 0.0,
-              'lessons': topic['count'],
+              'name': topic['name'],
+              'title': topic['name'],
+              'totalWords': totalWords,
+              'lessons': totalWords,
+              'learnedCount': learnedCount,
+              'progress': progressPercent / 100.0,
+              'level': _getTopicLevel(totalWords),
               'color': colors[index % colors.length],
             };
           }).toList();
@@ -64,7 +64,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         });
       } else {
         setState(() {
-          _topicsError = 'Failed to load topics: ${response.statusCode}';
+          _topicsError = 'Failed to load topics: ${response['statusCode']}';
           _isLoadingTopics = false;
         });
       }
@@ -87,9 +87,9 @@ class _VocabularyTabState extends State<VocabularyTab> {
       context,
       MaterialPageRoute(
         builder: (context) => FlashcardScreen(
-          topicTitle: topic['title'],
+          topicTitle: topic['name'],
           topicLevel: topic['level'],
-          totalLessons: topic['lessons'],
+          totalLessons: topic['totalWords'],
           progress: topic['progress'],
         ),
       ),
@@ -98,59 +98,31 @@ class _VocabularyTabState extends State<VocabularyTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Loading state
     if (_isLoadingTopics) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              color: Color(0xFF3DD598),
-            ),
+            CircularProgressIndicator(color: Color(0xFF3DD598)),
             SizedBox(height: 16),
-            Text(
-              'Loading topics...',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
+            Text('Loading topics...', style: TextStyle(fontSize: 16, color: Colors.grey)),
           ],
         ),
       );
     }
     
-    // Error state
     if (_topicsError != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 64,
-              color: Colors.red[300],
-            ),
+            Icon(Icons.error_outline, size: 64, color: Colors.red[300]),
             const SizedBox(height: 16),
-            const Text(
-              'Failed to load topics',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
-            ),
+            const Text('Failed to load topics', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                _topicsError!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[600],
-                ),
-              ),
+              child: Text(_topicsError!, textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey[600])),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -160,13 +132,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF3DD598),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -174,44 +141,25 @@ class _VocabularyTabState extends State<VocabularyTab> {
       );
     }
     
-    // Empty state
     if (_vocabularyTopics.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.library_books_outlined,
-              size: 64,
-              color: Colors.grey,
-            ),
+            Icon(Icons.library_books_outlined, size: 64, color: Colors.grey),
             SizedBox(height: 16),
-            Text(
-              'No topics available',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
+            Text('No topics available', style: TextStyle(fontSize: 16, color: Colors.grey)),
           ],
         ),
       );
     }
     
-    // Success state - display topics
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20.0),
-          child: Text(
-            'Vocabulary Topics',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-            ),
-          ),
+          child: Text('Vocabulary Topics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -221,10 +169,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               itemCount: _vocabularyTopics.length,
-              itemBuilder: (context, index) {
-                final topic = _vocabularyTopics[index];
-                return _buildTopicCard(topic);
-              },
+              itemBuilder: (context, index) => _buildTopicCard(_vocabularyTopics[index]),
             ),
           ),
         ),
@@ -233,6 +178,10 @@ class _VocabularyTabState extends State<VocabularyTab> {
   }
 
   Widget _buildTopicCard(Map<String, dynamic> topic) {
+    final progress = topic['progress'] ?? 0.0;
+    final learnedCount = topic['learnedCount'] ?? 0;
+    final totalWords = topic['totalWords'] ?? 0;
+    
     return GestureDetector(
       onTap: () => _navigateToFlashcard(topic),
       child: Container(
@@ -241,10 +190,7 @@ class _VocabularyTabState extends State<VocabularyTab> {
         decoration: BoxDecoration(
           color: const Color(0xFFF8F9FA),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: const Color(0xFFE9ECEF),
-            width: 1,
-          ),
+          border: Border.all(color: const Color(0xFFE9ECEF)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -252,62 +198,31 @@ class _VocabularyTabState extends State<VocabularyTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    topic['title'],
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: topic['color'],
-                    shape: BoxShape.circle,
-                  ),
-                ),
+                Expanded(child: Text(topic['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
+                Container(width: 12, height: 12, decoration: BoxDecoration(color: topic['color'], shape: BoxShape.circle)),
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              topic['level'],
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                color: Colors.grey[600],
-              ),
+            Row(
+              children: [
+                Text(topic['level'], style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                const SizedBox(width: 8),
+                Text('• $learnedCount/$totalWords words', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Progress',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                Text(
-                  '${(topic['progress'] * 100).toInt()}%',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
+                Text('Progress', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('${(progress * 100).toInt()}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ],
             ),
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
-                value: topic['progress'],
+                value: progress,
                 backgroundColor: const Color(0xFFE9ECEF),
                 valueColor: AlwaysStoppedAnimation<Color>(topic['color']),
                 minHeight: 6,
@@ -317,22 +232,8 @@ class _VocabularyTabState extends State<VocabularyTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  '${topic['lessons']} lessons',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                Text(
-                  'Continue',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: topic['color'],
-                  ),
-                ),
+                Text('$totalWords words', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('Continue', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: topic['color'])),
               ],
             ),
           ],

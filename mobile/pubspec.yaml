@@ -37,6 +37,7 @@ dependencies:
   email_validator: ^3.0.0
   image_picker: ^1.2.1
   audioplayers: ^5.2.1
+  shared_preferences: ^2.2.2
 
 
 dev_dependencies:

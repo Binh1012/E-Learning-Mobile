@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'lesson_completed_screen.dart';
+import '../../core/services/vocabulary_api_service.dart';
 
 class FlashcardScreen extends StatefulWidget {
   final String topicTitle;
@@ -31,17 +32,13 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   late AnimationController _flipController;
   late Animation<double> _flipAnimation;
-  late AnimationController _slideController;
-  late Animation<Offset> _slideAnimation;
 
   late List<int> _cardMemoryLevels;
 
   List<Map<String, String>> _flashcards = [];
+  List<String> _wordKeys = []; // Lưu wordKey của từng từ để gửi lên server
   bool _isLoadingFlashcards = true;
   String? _loadError;
-
-  // API Configuration
-  static const String API_BASE_URL = 'http://10.0.5.88:3000/api';
 
   @override
   void initState() {
@@ -69,40 +66,56 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     });
 
     try {
-      // Fetch words from API filtered by topic and A1 level
-      final response = await http.get(
-        Uri.parse(
-          '$API_BASE_URL/words?topic=${Uri.encodeComponent(widget.topicTitle)}&limit=10',
-        ),
+      // Gọi API /api/vocabs/new-words với topic
+      final data = await VocabularyApiService.getNewWords(
+        topicName: widget.topicTitle,
+        limit: 10,
       );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
+      print('API Response: $data');
+
+      // Parse response structure: {statusCode: 200, message: "Success", data: [...]}
+      if (data['statusCode'] == 200 && data['data'] != null) {
         final words = data['data'] as List;
 
-        final flashcards = words.map<Map<String, String>>((word) {
-          final entry = word['entry'] as Map<String, dynamic>? ?? {};
-          return {
+        final flashcards = <Map<String, String>>[];
+        final wordKeys = <String>[];
+
+        for (var word in words) {
+          // Lấy wordKey
+          final wordKey = word['wordKey']?.toString() ?? '';
+          wordKeys.add(wordKey);
+
+          // Lấy entry đầu tiên (vì entries là array)
+          final entries = word['entries'] as List?;
+          final entry = entries != null && entries.isNotEmpty 
+              ? entries[0] as Map<String, dynamic>
+              : <String, dynamic>{};
+
+          // Map dữ liệu theo cấu trúc mới
+          flashcards.add({
             'word': word['word']?.toString() ?? '',
             'pronunciation': entry['phonetic']?.toString() ?? '',
             'meaning': entry['word_vi']?.toString() ?? '',
             'example': entry['example']?.toString() ?? '',
             'audio': entry['audio']?.toString() ?? '',
-          };
-        }).toList();
+          });
+        }
 
         setState(() {
           _flashcards = flashcards;
+          _wordKeys = wordKeys;
           _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
           _isLoadingFlashcards = false;
         });
       } else {
         setState(() {
-          _loadError = 'Không thể tải từ vựng (${response.statusCode})';
+          _loadError = 'Không thể tải từ vựng: ${data['message'] ?? 'Unknown error'}';
           _isLoadingFlashcards = false;
         });
       }
     } catch (e) {
+      print('Error loading vocabulary: $e');
       setState(() {
         _loadError = 'Lỗi: $e';
         _isLoadingFlashcards = false;
@@ -172,15 +185,38 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
   }
 
-  void _setMemoryLevel(int level) {
+  void _setMemoryLevel(int quality) {
     setState(() {
-      _cardMemoryLevels[_currentIndex] = level;
+      _cardMemoryLevels[_currentIndex] = quality;
     });
+
+    // Gửi kết quả học lên server với quality (1-4)
+    _submitAnswer(quality);
 
     if (_cardMemoryLevels.every((level) => level > 0)) {
       Future.delayed(const Duration(milliseconds: 500), () {
         _showCompletedScreen();
       });
+    }
+  }
+
+  Future<void> _submitAnswer(int quality) async {
+    try {
+      final wordKey = _wordKeys[_currentIndex];
+      
+      print('📤 Submitting answer - wordKey: $wordKey, quality: $quality');
+      
+      final result = await VocabularyApiService.submitAnswer(
+        wordKey: wordKey,
+        quality: quality,
+      );
+      
+      print('✅ Answer submitted successfully');
+      print('📊 Next review: ${result['data']?['nextReview']}');
+      print('📈 Interval: ${result['data']?['interval']} days');
+    } catch (e) {
+      print('❌ Error submitting answer: $e');
+      // Không hiển thị lỗi cho user, chỉ log ra console
     }
   }
 
@@ -345,14 +381,21 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                         color: Colors.red,
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        _loadError!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         onPressed: _loadVocabularyWords,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3DD598),
+                          foregroundColor: Colors.white,
+                        ),
                         child: const Text('Thử lại'),
                       ),
                     ],
@@ -752,7 +795,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                         label: 'Không nhớ',
                         sublabel: 'Cần học lại',
                         emoji: '😔',
-                        level: 1,
+                        level: 1, // quality = 1
                         isSelected: currentMemoryLevel == 1,
                         borderColor: Colors.red,
                         backgroundColor: Colors.white,
@@ -762,7 +805,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                         label: 'Hơi nhớ',
                         sublabel: 'Cần ôn tập',
                         emoji: '🙂',
-                        level: 2,
+                        level: 2, // quality = 2
                         isSelected: currentMemoryLevel == 2,
                         borderColor: Colors.orange,
                         backgroundColor: Colors.white,
@@ -772,7 +815,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                         label: 'Nhớ khá',
                         sublabel: 'Đã nắm vững',
                         emoji: '😊',
-                        level: 3,
+                        level: 3, // quality = 3
                         isSelected: currentMemoryLevel == 3,
                         borderColor: Colors.lightGreen,
                         backgroundColor: Colors.white,
@@ -781,8 +824,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       _buildRatingButton(
                         label: 'Nhớ rất tốt',
                         sublabel: 'Thước lường',
-                        emoji: '😍',
-                        level: 4,
+                        emoji: '😄',
+                        level: 4, // quality = 4
                         isSelected: currentMemoryLevel == 4,
                         borderColor:
                              Colors.blue,
