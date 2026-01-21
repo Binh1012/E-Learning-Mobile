@@ -493,7 +493,7 @@ class _ReviewLessonScreenState extends State<ReviewLessonScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final currentCard = widget.flashcards.isNotEmpty 
+    final currentCard = widget.flashcards.isNotEmpty
         ? widget.flashcards[_currentIndex]
         : {};
     final currentMemoryLevel = _cardMemoryLevels[_currentIndex];

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import 'main_navigation_screen.dart';
+import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +18,33 @@ class _LoginScreenState extends State<LoginScreen> {
   bool rememberMe = false;
   bool obscurePassword = true;
 
+  void _login() async {
+    // ===== 1. Check nhập đủ =====
+    if (emailController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter email and password'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // ===== 2. LƯU TOKEN CHỈ KHI REMEMBER ME =====
+    if (rememberMe) {
+      await AuthService.saveToken('fake_login_token');
+    }
+
+    // ===== 3. Vào main =====
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainNavigationScreen(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -28,7 +56,6 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                // ===== Title =====
                 const SizedBox(height: 40),
                 const Center(
                   child: Text(
@@ -50,7 +77,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 40),
 
-                // ===== Email =====
                 const Text("Email"),
                 const SizedBox(height: 8),
                 TextField(
@@ -68,7 +94,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Password =====
                 const Text("Password"),
                 const SizedBox(height: 8),
                 TextField(
@@ -99,7 +124,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 10),
 
-                // ===== Remember & Forgot =====
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -132,7 +156,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Login Button =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -143,14 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: _login,
                     child: const Text(
                       "Login",
                       style: TextStyle(fontSize: 16),
@@ -160,7 +176,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // ===== OR =====
                 Row(
                   children: const [
                     Expanded(child: Divider()),
@@ -174,7 +189,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Google Login =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -195,7 +209,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // ===== Sign Up =====
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
