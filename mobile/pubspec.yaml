@@ -40,6 +40,7 @@ dependencies:
   audioplayers: ^5.2.1
 
 
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -95,4 +96,3 @@ flutter:
   # see https://flutter.dev/to/font-from-package
   assets:
     - assets/images/
-    - assets/audios/

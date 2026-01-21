@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'dart:math' as math;
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'lesson_completed_screen.dart';
 
 class FlashcardScreen extends StatefulWidget {
@@ -21,78 +23,91 @@ class FlashcardScreen extends StatefulWidget {
   State<FlashcardScreen> createState() => _FlashcardScreenState();
 }
 
-class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProviderStateMixin {
+class _FlashcardScreenState extends State<FlashcardScreen>
+    with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
   bool _showBack = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
-  
-  // Animation controller for flip effect
+
   late AnimationController _flipController;
   late Animation<double> _flipAnimation;
-  
-  // Track learned cards
-  final Set<int> _learnedCards = {};
+  late AnimationController _slideController;
+  late Animation<Offset> _slideAnimation;
 
-  // Sample flashcard data with audio files
-  final List<Map<String, String>> _flashcards = [
-    {
-      'word': 'Hello',
-      'pronunciation': '/həˈloʊ/',
-      'meaning': 'Xin chào',
-      'exampleEn': 'Hello, how are you today?',
-      'exampleVi': 'Xin chào, hôm nay bạn thế nào?',
-      'audio': 'audios/hello.mp3',
-    },
-    {
-      'word': 'Goodbye',
-      'pronunciation': '/ˌɡʊdˈbaɪ/',
-      'meaning': 'Tạm biệt',
-      'exampleEn': 'Goodbye, see you tomorrow!',
-      'exampleVi': 'Tạm biệt, hẹn gặp lại ngày mai!',
-      'audio': 'audios/goodbye.mp3',
-    },
-    {
-      'word': 'Thank you',
-      'pronunciation': '/θæŋk juː/',
-      'meaning': 'Cảm ơn',
-      'exampleEn': 'Thank you for your help.',
-      'exampleVi': 'Cảm ơn vì sự giúp đỡ của bạn.',
-      'audio': 'audios/thank_you.mp3',
-    },
-    {
-      'word': 'Please',
-      'pronunciation': '/pliːz/',
-      'meaning': 'Làm ơn',
-      'exampleEn': 'Please pass me the salt.',
-      'exampleVi': 'Làm ơn đưa tôi muối.',
-      'audio': 'audios/please.mp3',
-    },
-    {
-      'word': 'Welcome',
-      'pronunciation': '/ˈwelkəm/',
-      'meaning': 'Chào mừng',
-      'exampleEn': 'Welcome to our home!',
-      'exampleVi': 'Chào mừng đến nhà chúng tôi!',
-      'audio': 'audios/welcome.mp3',
-    },
-  ];
+  late List<int> _cardMemoryLevels;
+
+  List<Map<String, String>> _flashcards = [];
+  bool _isLoadingFlashcards = true;
+  String? _loadError;
+
+  // API Configuration
+  static const String API_BASE_URL = 'http://10.0.5.88:3000/api';
 
   @override
   void initState() {
     super.initState();
-    
-    // Initialize flip animation
+
     _flipController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
     );
-    
+
     _flipAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _flipController,
         curve: Curves.easeInOut,
       ),
     );
+
+    _loadVocabularyWords();
+  }
+
+  Future<void> _loadVocabularyWords() async {
+    setState(() {
+      _isLoadingFlashcards = true;
+      _loadError = null;
+    });
+
+    try {
+      // Fetch words from API filtered by topic and A1 level
+      final response = await http.get(
+        Uri.parse(
+          '$API_BASE_URL/words?topic=${Uri.encodeComponent(widget.topicTitle)}&limit=10',
+        ),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final words = data['data'] as List;
+
+        final flashcards = words.map<Map<String, String>>((word) {
+          final entry = word['entry'] as Map<String, dynamic>? ?? {};
+          return {
+            'word': word['word']?.toString() ?? '',
+            'pronunciation': entry['phonetic']?.toString() ?? '',
+            'meaning': entry['word_vi']?.toString() ?? '',
+            'example': entry['example']?.toString() ?? '',
+            'audio': entry['audio']?.toString() ?? '',
+          };
+        }).toList();
+
+        setState(() {
+          _flashcards = flashcards;
+          _cardMemoryLevels = List<int>.filled(_flashcards.length, 0);
+          _isLoadingFlashcards = false;
+        });
+      } else {
+        setState(() {
+          _loadError = 'Không thể tải từ vựng (${response.statusCode})';
+          _isLoadingFlashcards = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _loadError = 'Lỗi: $e';
+        _isLoadingFlashcards = false;
+      });
+    }
   }
 
   @override
@@ -105,17 +120,19 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
   Future<void> _playAudio() async {
     try {
       final currentCard = _flashcards[_currentIndex];
-      final audioPath = currentCard['audio'];
-      
-      if (audioPath != null && audioPath.isNotEmpty) {
-        // Stop any currently playing audio
+      final audioUrl = currentCard['audio'];
+
+      if (audioUrl != null && audioUrl.isNotEmpty) {
         await _audioPlayer.stop();
-        
-        // Play the audio file from assets
-        await _audioPlayer.play(AssetSource(audioPath));
+        // Check if it's a URL or local asset
+        if (audioUrl.startsWith('http')) {
+          await _audioPlayer.play(UrlSource(audioUrl));
+        } else {
+          await _audioPlayer.play(AssetSource(audioUrl));
+        }
       }
     } catch (e) {
-      print('Error playing audio: $e');
+      debugPrint('Error playing audio: $e');
     }
   }
 
@@ -125,7 +142,6 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         _currentIndex++;
         _showBack = false;
       });
-      // Reset flip animation
       _flipController.reset();
     }
   }
@@ -136,21 +152,18 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
         _currentIndex--;
         _showBack = false;
       });
-      // Reset flip animation
       _flipController.reset();
     }
   }
 
   void _toggleCard() {
     if (_showBack) {
-      // Flip from back to front
       _flipController.reverse().then((_) {
         setState(() {
           _showBack = false;
         });
       });
     } else {
-      // Flip from front to back
       _flipController.forward().then((_) {
         setState(() {
           _showBack = true;
@@ -159,20 +172,16 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
     }
   }
 
-  void _toggleLearned() {
+  void _setMemoryLevel(int level) {
     setState(() {
-      if (_learnedCards.contains(_currentIndex)) {
-        _learnedCards.remove(_currentIndex);
-      } else {
-        _learnedCards.add(_currentIndex);
-        // Check if all cards are learned
-        if (_learnedCards.length == _flashcards.length) {
-          Future.delayed(const Duration(milliseconds: 500), () {
-            _showCompletedScreen();
-          });
-        }
-      }
+      _cardMemoryLevels[_currentIndex] = level;
     });
+
+    if (_cardMemoryLevels.every((level) => level > 0)) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _showCompletedScreen();
+      });
+    }
   }
 
   void _showCompletedScreen() {
@@ -183,33 +192,247 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
           topicTitle: widget.topicTitle,
           cardsLearned: _flashcards.length,
           accuracy: 100,
+          flashcards: _flashcards,
+          cardMemoryLevels: _cardMemoryLevels,
         ),
       ),
     );
   }
 
   double get _progressValue {
-    return _learnedCards.length / _flashcards.length;
+    int ratedCards =
+        _cardMemoryLevels.where((level) => level > 0).length;
+    return ratedCards / _flashcards.length;
+  }
+
+  Widget _buildRatingButton({
+    required String label,
+    required String sublabel,
+    required String emoji,
+    required int level,
+    required bool isSelected,
+    required Color borderColor,
+    required Color backgroundColor,
+    required Color textColor,
+  }) {
+    return GestureDetector(
+      onTap: () => _setMemoryLevel(level),
+      child: Container(
+        width: (MediaQuery.of(context).size.width - 50) / 2,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? borderColor.withOpacity(0.1)
+              : backgroundColor,
+          border: Border.all(
+            color: isSelected ? borderColor : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: isSelected ? borderColor : textColor,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              sublabel,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    // Show loading state
+    if (_isLoadingFlashcards) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation(Color(0xFF3DD598)),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Đang tải từ vựng...'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show error state
+    if (_loadError != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _loadError!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _loadVocabularyWords,
+                        child: const Text('Thử lại'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Show empty state
+    if (_flashcards.isEmpty) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F5F5),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    Expanded(
+                      child: Text(
+                        widget.topicTitle,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.inbox,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Không có từ vựng nào',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final currentCard = _flashcards[_currentIndex];
-    final isLearned = _learnedCards.contains(_currentIndex);
+    final currentMemoryLevel = _cardMemoryLevels[_currentIndex];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: Column(
           children: [
-            // Header
+            /// HEADER
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () => Navigator.pop(context),
                   ),
                   Expanded(
                     child: Text(
@@ -217,42 +440,34 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black,
                       ),
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.access_time, color: Colors.black),
-                    onPressed: () {},
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.arrow_forward, color: Colors.black),
-                    onPressed: () {},
                   ),
                 ],
               ),
             ),
 
-            // Progress Section
+            /// PROGRESS
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
                         'Progress',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
                         ),
                       ),
                       Text(
-                        '${(_progressValue * 100).toInt()}%',
+                        '${(_progressValue * 100).toStringAsFixed(0)}%',
                         style: const TextStyle(
-                          fontSize: 14,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Colors.black,
                         ),
@@ -260,14 +475,13 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: _progressValue,
-                      backgroundColor: const Color(0xFFE0E0E0),
-                      valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
-                      minHeight: 8,
+                  LinearProgressIndicator(
+                    value: _progressValue,
+                    backgroundColor: const Color(0xFFE0E0E0),
+                    valueColor: const AlwaysStoppedAnimation(
+                      Color(0xFF3DD598),
                     ),
+                    minHeight: 8,
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -281,7 +495,7 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                         ),
                       ),
                       Text(
-                        '${_learnedCards.length} learned',
+                        '${_cardMemoryLevels.where((level) => level > 0).length} learned',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -296,26 +510,32 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
 
             const SizedBox(height: 30),
 
-            // Flashcard with 3D Flip Animation
+            /// FLASHCARD
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: AnimatedBuilder(
-                  animation: _flipAnimation,
-                  builder: (context, child) {
-                    // Calculate rotation angle
-                    final angle = _flipAnimation.value * math.pi; // π radians = 180 degrees
-                    
-                    // Determine which side to show based on rotation
-                    final isShowingFront = angle < (math.pi / 2);
-                    
-                    return Transform(
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001) // perspective
-                        ..rotateY(angle),
-                      alignment: Alignment.center,
-                      child: GestureDetector(
-                        onTap: _toggleCard,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GestureDetector(
+                  onTap: _toggleCard,
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity! > 0) {
+                      _previousCard();
+                    } else if (details.primaryVelocity! < 0) {
+                      _nextCard();
+                    }
+                  },
+                  child: AnimatedBuilder(
+                    animation: _flipAnimation,
+                    builder: (context, child) {
+                      final angle =
+                          _flipAnimation.value * math.pi;
+                      final isShowingFront =
+                          angle < (math.pi / 2);
+
+                      return Transform(
+                        transform: Matrix4.identity()
+                          ..setEntry(3, 2, 0.001)
+                          ..rotateY(angle),
+                        alignment: Alignment.center,
                         child: Container(
                           width: double.infinity,
                           decoration: BoxDecoration(
@@ -323,7 +543,8 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
+                                color:
+                                    Colors.black.withOpacity(0.08),
                                 blurRadius: 20,
                                 offset: const Offset(0, 4),
                               ),
@@ -331,254 +552,247 @@ class _FlashcardScreenState extends State<FlashcardScreen> with SingleTickerProv
                           ),
                           child: Transform(
                             transform: Matrix4.identity()
-                              ..rotateY(isShowingFront ? 0 : math.pi), // Flip back side
+                              ..rotateY(
+                                  isShowingFront ? 0 : math.pi),
                             alignment: Alignment.center,
                             child: Padding(
-                              padding: const EdgeInsets.all(32.0),
+                              padding:
+                                  const EdgeInsets.all(20),
                               child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (isShowingFront) ...[
-                            // Front of card - Word
-                            Text(
-                              currentCard['word']!,
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: isShowingFront
+                                    ? [
+                                        Text(
+                                          currentCard['word']!,
+                                          style:
+                                              const TextStyle(
+                                            fontSize: 48,
+                                            fontWeight:
+                                                FontWeight.w700,
+                                          ),
+                                          textAlign:
+                                              TextAlign.center,
+                                        ),
+                                        const SizedBox(
+                                            height: 8),
+                                        Text(
+                                          currentCard[
+                                              'pronunciation']!,
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors
+                                                .grey[600],
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 24),
+                                        GestureDetector(
+                                          onTap: _playAudio,
+                                          child: Container(
+                                            width: 60,
+                                            height: 60,
+                                            decoration:
+                                                const BoxDecoration(
+                                              color:
+                                                  Color(0xFF3DD598),
+                                              shape:
+                                                  BoxShape.circle,
+                                            ),
+                                            child: const Icon(
+                                              Icons.play_arrow,
+                                              color:
+                                                  Colors.white,
+                                              size: 28,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 16),
+                                        const Text(
+                                          'Tap to flip card',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment
+                                                  .center,
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  const BoxDecoration(
+                                                color: Color(
+                                                    0xFF3DD598),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                width: 8),
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(
+                                                        0.3),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ]
+                                    : [
+                                        Text(
+                                          currentCard['meaning']!,
+                                          style:
+                                              const TextStyle(
+                                            fontSize: 48,
+                                            fontWeight:
+                                                FontWeight.w700,
+                                          ),
+                                          textAlign:
+                                              TextAlign.center,
+                                        ),
+                                        const SizedBox(
+                                            height: 16),
+                                        Text(
+                                          currentCard[
+                                              'example']!,
+                                          textAlign:
+                                              TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 16),
+                                        const Text(
+                                          'Tap to flip back',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        const SizedBox(
+                                            height: 12),
+                                        Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment
+                                                  .center,
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  BoxDecoration(
+                                                color: Colors.grey
+                                                    .withOpacity(
+                                                        0.3),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(
+                                                width: 8),
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration:
+                                                  const BoxDecoration(
+                                                color: Color(
+                                                    0xFF3DD598),
+                                                shape:
+                                                    BoxShape.circle,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                               ),
-                              textAlign: TextAlign.center,
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              currentCard['pronunciation']!,
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 40),
-                            // Play button
-                            GestureDetector(
-                              onTap: _playAudio,
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF3DD598),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.play_arrow,
-                                  color: Colors.white,
-                                  size: 32,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 40),
-                            Text(
-                              'Tap to flip card',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                            // Dot indicator
-                            const SizedBox(height: 8),
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF3DD598),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ] else ...[
-                            // Back of card - Meaning
-                            Text(
-                              currentCard['meaning']!,
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Container(
-                              width: 50,
-                              height: 3,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF3DD598),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(height: 40),
-                            // Example sentences
-                            Column(
-                              children: [
-                                Text(
-                                  currentCard['exampleEn']!,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.black,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  currentCard['exampleVi']!,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 40),
-                            Text(
-                              'Tap to flip back',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                            // Dot indicator
-                            const SizedBox(height: 8),
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF3DD598),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
-            );
-          },
-        ),
-      ),
-    ),
-
-            const SizedBox(height: 30),
-
-            // Navigation buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Previous button
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: _currentIndex > 0 ? _previousCard : null,
-                      icon: Icon(
-                        Icons.arrow_back_ios_new,
-                        color: _currentIndex > 0
-                            ? Colors.black
-                            : Colors.grey[400],
-                        size: 20,
-                      ),
-                    ),
-                  ),
-
-                  // Learned button
-                  GestureDetector(
-                    onTap: _toggleLearned,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 14,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isLearned ? const Color(0xFF3DD598) : Colors.white,
-                        border: Border.all(
-                          color: const Color(0xFF3DD598),
-                          width: 2,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            isLearned ? 'Learned' : 'Mark as Learned',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: isLearned ? Colors.white : const Color(0xFF3DD598),
-                            ),
-                          ),
-                          if (isLearned) ...[
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.check,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Next button
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: IconButton(
-                      onPressed: _currentIndex < _flashcards.length - 1
-                          ? _nextCard
-                          : null,
-                      icon: Icon(
-                        Icons.arrow_forward_ios,
-                        color: _currentIndex < _flashcards.length - 1
-                            ? Colors.black
-                            : Colors.grey[400],
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ),
 
-            // Dot indicators
+            /// RATING
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_flashcards.length, (index) {
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: index == _currentIndex
-                          ? const Color(0xFF3DD598)
-                          : Colors.grey[300],
-                      shape: BoxShape.circle,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 20, vertical: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Đánh giá mức độ ghi nhớ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
                     ),
-                  );
-                }),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _buildRatingButton(
+                        label: 'Không nhớ',
+                        sublabel: 'Cần học lại',
+                        emoji: '😔',
+                        level: 1,
+                        isSelected: currentMemoryLevel == 1,
+                        borderColor: Colors.red,
+                        backgroundColor: Colors.white,
+                        textColor: Colors.red,
+                      ),
+                      _buildRatingButton(
+                        label: 'Hơi nhớ',
+                        sublabel: 'Cần ôn tập',
+                        emoji: '🙂',
+                        level: 2,
+                        isSelected: currentMemoryLevel == 2,
+                        borderColor: Colors.orange,
+                        backgroundColor: Colors.white,
+                        textColor: Colors.orange,
+                      ),
+                      _buildRatingButton(
+                        label: 'Nhớ khá',
+                        sublabel: 'Đã nắm vững',
+                        emoji: '😊',
+                        level: 3,
+                        isSelected: currentMemoryLevel == 3,
+                        borderColor: Colors.lightGreen,
+                        backgroundColor: Colors.white,
+                        textColor: Colors.lightGreen,
+                      ),
+                      _buildRatingButton(
+                        label: 'Nhớ rất tốt',
+                        sublabel: 'Thước lường',
+                        emoji: '😍',
+                        level: 4,
+                        isSelected: currentMemoryLevel == 4,
+                        borderColor:
+                             Colors.blue,
+                        backgroundColor: Colors.white,
+                        textColor:
+                            Colors.blue,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
