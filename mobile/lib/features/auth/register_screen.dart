@@ -17,6 +17,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool obscurePassword = true;
   bool agreeTerms = false;
 
+  // ===== EMAIL VALIDATION =====
+  bool _isValidEmail(String email) {
+    final emailRegex =
+    RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+    return emailRegex.hasMatch(email);
+  }
+
+  // ===== PASSWORD VALIDATION (MATCH BACKEND) =====
+  bool _isStrongPassword(String password) {
+    final passwordRegex = RegExp(
+      r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$',
+    );
+    return passwordRegex.hasMatch(password);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -29,7 +44,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-
                   const SizedBox(height: 40),
 
                   // ===== Title =====
@@ -60,7 +74,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: nameController,
                     decoration: _inputDecoration("Enter your Name"),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return "Vui lòng nhập họ tên";
                       }
                       return null;
@@ -76,11 +90,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     controller: emailController,
                     decoration: _inputDecoration("Enter your Email"),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return "Vui lòng nhập email";
                       }
-                      if (!value.contains("@")) {
-                        return "Email không hợp lệ";
+                      if (!_isValidEmail(value.trim())) {
+                        return "Email không đúng định dạng";
                       }
                       return null;
                     },
@@ -113,11 +127,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value == null || value.isEmpty) {
                         return "Vui lòng nhập mật khẩu";
                       }
-                      if (value.length < 6) {
-                        return "Mật khẩu ít nhất 6 ký tự";
+                      if (!_isStrongPassword(value)) {
+                        return "Mật khẩu ≥ 8 ký tự, gồm chữ hoa, thường, số & ký tự đặc biệt";
                       }
                       return null;
                     },
+                  ),
+
+                  const SizedBox(height: 6),
+                  const Text(
+                    "Password must contain uppercase, lowercase, number & special character",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
 
                   const SizedBox(height: 20),
@@ -133,29 +153,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           });
                         },
                       ),
-                      Expanded(
-                        child: RichText(
-                          text: const TextSpan(
-                            style: TextStyle(color: Colors.black),
-                            children: [
-                              TextSpan(text: "I agree with "),
-                              TextSpan(
-                                text: "Terms of Use",
-                                style: TextStyle(
-                                  decoration: TextDecoration.underline,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              TextSpan(text: " and "),
-                              TextSpan(
-                                text: "Privacy Policy",
-                                style: TextStyle(
-                                  decoration: TextDecoration.underline,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                      const Expanded(
+                        child: Text(
+                          "I agree with Terms of Use and Privacy Policy",
                         ),
                       ),
                     ],
@@ -166,7 +166,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       padding: EdgeInsets.only(left: 12),
                       child: Text(
                         "Bạn cần đồng ý điều khoản",
-                        style: TextStyle(color: Colors.red, fontSize: 12),
+                        style:
+                        TextStyle(color: Colors.red, fontSize: 12),
                       ),
                     ),
 
@@ -184,51 +185,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                       onPressed: () {
-                        if (_formKey.currentState!.validate() && agreeTerms) {
+                        if (_formKey.currentState!.validate() &&
+                            agreeTerms) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text("Đăng ký thành công"),
+                              content:
+                              Text("Đăng ký hợp lệ, có thể gọi API"),
                             ),
                           );
-                          Navigator.pop(context); // quay lại Login
+                          Navigator.pop(context);
                         }
                       },
                       child: const Text("Sign Up"),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // ===== OR =====
-                  Row(
-                    children: const [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text("OR"),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ===== Google =====
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: Image.network(
-                        "https://upload.wikimedia.org/wikipedia/commons/0/09/IOS_Google_icon.png",
-                        height: 20,
-                      ),
-                      label: const Text("Sign up with Google"),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
                     ),
                   ),
 

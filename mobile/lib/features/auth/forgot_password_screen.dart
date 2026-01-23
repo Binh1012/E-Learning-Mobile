@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/auth_service.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -77,16 +78,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: () {
+                      onPressed: () async {
                         if (_formKey.currentState!.validate()) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Reset link đã được gửi"),
-                            ),
-                          );
-                          Navigator.pop(context);
+                          final success =
+                          await AuthService.forgotPassword(emailController.text);
+
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("OTP đã được gửi về email")),
+                            );
+
+                            // TODO: chuyển sang màn hình nhập OTP
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Gửi OTP thất bại")),
+                            );
+                          }
                         }
                       },
+
                       child: const Text(
                         "Send Reset Link",
                         style: TextStyle(fontSize: 16),

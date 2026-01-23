@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../navigation/main_navigation_screen.dart';
+import '../../../core/services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,6 +17,72 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool rememberMe = false;
   bool obscurePassword = true;
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoLogin();
+  }
+
+  // ================= AUTO LOGIN =================
+  Future<void> _autoLogin() async {
+    final token = await AuthService.getAccessToken();
+    if (token != null && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+        ),
+      );
+    }
+  }
+
+  // ================= LOGIN =================
+  Future<void> _login() async {
+    if (emailController.text.trim().isEmpty ||
+        passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter email and password'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    final success = await AuthService.login(
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+    );
+
+    setState(() => isLoading = false);
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login failed'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // ❗ KHÔNG remember → xóa token
+    if (!rememberMe) {
+      await AuthService.clearTokens();
+    }
+
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const MainNavigationScreen(),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,8 +94,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ===== Title =====
                 const SizedBox(height: 40),
                 const Center(
                   child: Text(
@@ -47,14 +112,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: TextStyle(color: Colors.grey),
                   ),
                 ),
-
                 const SizedBox(height: 40),
 
-                // ===== Email =====
+                // ================= EMAIL =================
                 const Text("Email"),
                 const SizedBox(height: 8),
                 TextField(
                   controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     hintText: "Enter your Email",
                     filled: true,
@@ -68,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Password =====
+                // ================= PASSWORD =================
                 const Text("Password"),
                 const SizedBox(height: 8),
                 TextField(
@@ -99,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 10),
 
-                // ===== Remember & Forgot =====
+                // ================= REMEMBER + FORGOT =================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -109,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           value: rememberMe,
                           onChanged: (value) {
                             setState(() {
-                              rememberMe = value!;
+                              rememberMe = value ?? false;
                             });
                           },
                         ),
@@ -132,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Login Button =====
+                // ================= LOGIN BUTTON =================
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -143,15 +208,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const MainNavigationScreen(),
-                        ),
-                      );
-                    },
-                    child: const Text(
+                    onPressed: isLoading ? null : _login,
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
                       "Login",
                       style: TextStyle(fontSize: 16),
                     ),
@@ -160,7 +220,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // ===== OR =====
                 Row(
                   children: const [
                     Expanded(child: Divider()),
@@ -174,7 +233,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // ===== Google Login =====
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -195,7 +253,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 30),
 
-                // ===== Sign Up =====
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
