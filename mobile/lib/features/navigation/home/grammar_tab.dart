@@ -308,6 +308,7 @@ class _GrammarTabState extends State<GrammarTab> {
             builder: (context) => GrammarLessonScreen(
               grammarTitle: lesson['title'],
               grammarLevel: lesson['level'],
+              lessonId: lesson['lesson_id'],
             ),
           ),
         );
