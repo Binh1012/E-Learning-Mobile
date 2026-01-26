@@ -46,20 +46,45 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Welcome Header
+            // Welcome Header with Logo
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Welcome',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                  // Logo
+                  Image.asset(
+                    'assets/images/Logo.png',
+                    width: 40,
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3DD598),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.home,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  // Welcome Title
+                  const Expanded(
+                    child: Text(
+                      'Welcome',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
+                  // Notification Icon
                   Container(
                     width: 48,
                     height: 48,
@@ -115,34 +140,37 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Category Tabs
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
-                children: List.generate(_tabs.length, (index) {
-                  final isActive = _currentTabIndex == index;
-                  return GestureDetector(
-                    onTap: () {
-                      _tabController.animateTo(index);
-                    },
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isActive ? const Color(0xFF3DD598) : const Color(0xFFF5F5F5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        _tabs[index],
-                        style: TextStyle(
-                          color: isActive ? Colors.white : Colors.black,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: List.generate(_tabs.length, (index) {
+                    final isActive = _currentTabIndex == index;
+                    return GestureDetector(
+                      onTap: () {
+                        _tabController.animateTo(index);
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isActive ? const Color(0xFF3DD598) : const Color(0xFFF5F5F5),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          _tabs[index],
+                          style: TextStyle(
+                            color: isActive ? Colors.white : Colors.black,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }),
+                    );
+                  }),
+                ),
               ),
             ),
 
