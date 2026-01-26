@@ -35,7 +35,7 @@ class _VocabularyPracticeTabState extends State<VocabularyPracticeTab> {
       
       // Changed from grammar/lessons to vocabulary/lessons
       final response = await http.get(
-        Uri.parse('$API_BASE_URL/grammar/lessons?limit=50&categoryId=2'),
+        Uri.parse('$API_BASE_URL/vocabs/lessons'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
