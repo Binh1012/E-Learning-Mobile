@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/screens/option_screen.dart';
-import 'on2_screen.dart';
+import 'package:mobile/features/auth/option_screen.dart';
+import 'on3_screen.dart';
 import 'package:mobile/widgets/dot_indicator.dart';
-class On1Screen extends StatelessWidget {
-  const On1Screen({Key? key}) : super(key: key);
+
+class On2Screen extends StatelessWidget {
+  const On2Screen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -21,14 +22,14 @@ class On1Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Illustration
                       Image.asset(
-                        'assets/images/on1.png',
+                        'assets/images/on2.png',
                         height: 260,
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Personalize Your TOEIC',
+                        'Learn TOEIC Vocabulary',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -38,7 +39,7 @@ class On1Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Learning Path',
+                        'By Topic',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -50,7 +51,7 @@ class On1Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Set Your Target TOEIC Score And Study Vocabulary \nTailored To Your Current Level.',
+                        'Master Essential Vocabulary From Real TOEIC Topics \nSuch As Office, Travel, Marketing, And Business.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -64,13 +65,13 @@ class On1Screen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
+                          const DotWidget(isActive: false),
+                          const SizedBox(width: 8),
                           const DotWidget(isActive: true),
                           const SizedBox(width: 8),
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: false),
-                          const SizedBox(width: 8),
-                          const DotWidget(isActive: false), 
+                          const DotWidget(isActive: false),         
                         ],
                       ),
                     ],
@@ -92,7 +93,7 @@ class On1Screen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const On2Screen(),
+                            builder: (context) => const On3Screen(),
                           ),
                         );
                       },

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'option_screen.dart';
+import 'package:mobile/features/auth/option_screen.dart';
+import 'on2_screen.dart';
 import 'package:mobile/widgets/dot_indicator.dart';
-
-class On4Screen extends StatelessWidget {
-  const On4Screen({Key? key}) : super(key: key);
+class On1Screen extends StatelessWidget {
+  const On1Screen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -21,14 +21,14 @@ class On4Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Illustration
                       Image.asset(
-                        'assets/images/on4.png',
+                        'assets/images/on1.png',
                         height: 260,
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Start Your TOEIC',
+                        'Personalize Your TOEIC',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -38,7 +38,7 @@ class On4Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'Journey',
+                        'Learning Path',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -50,7 +50,7 @@ class On4Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Follow A Clear Learning Path And Build Strong \nVocabulary To Achieve Your TOEIC Target Score.',
+                        'Set Your Target TOEIC Score And Study Vocabulary \nTailored To Your Current Level.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -64,13 +64,13 @@ class On4Screen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const DotWidget(isActive: false),
+                          const DotWidget(isActive: true),
                           const SizedBox(width: 8),
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: true), 
+                          const DotWidget(isActive: false), 
                         ],
                       ),
                     ],
@@ -92,7 +92,7 @@ class On4Screen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const OptionScreen(),
+                            builder: (context) => const On2Screen(),
                           ),
                         );
                       },
@@ -115,6 +115,26 @@ class On4Screen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  // Skip Button
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const OptionScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'SKIP',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF6B7280),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

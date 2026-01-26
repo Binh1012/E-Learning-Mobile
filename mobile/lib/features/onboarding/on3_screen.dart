@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:mobile/screens/option_screen.dart';
-import 'on3_screen.dart';
+import 'on4_screen.dart';
+import '../auth/option_screen.dart';
 import 'package:mobile/widgets/dot_indicator.dart';
 
-class On2Screen extends StatelessWidget {
-  const On2Screen({Key? key}) : super(key: key);
+class On3Screen extends StatelessWidget {
+  const On3Screen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -22,14 +22,14 @@ class On2Screen extends StatelessWidget {
                       const SizedBox(height: 60),
                       // Illustration
                       Image.asset(
-                        'assets/images/on2.png',
+                        'assets/images/on3.png',
                         height: 260,
                         fit: BoxFit.contain,
                       ),
                       const SizedBox(height: 60),
                       // Title
                       const Text(
-                        'Learn TOEIC Vocabulary',
+                        'Practice Smart',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -39,7 +39,7 @@ class On2Screen extends StatelessWidget {
                         textAlign: TextAlign.center,
                       ),
                       const Text(
-                        'By Topic',
+                        'Remember Longer',
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w600,
@@ -51,7 +51,7 @@ class On2Screen extends StatelessWidget {
                       const SizedBox(height: 20),
                       // Description
                       const Text(
-                        'Master Essential Vocabulary From Real TOEIC Topics \nSuch As Office, Travel, Marketing, And Business.',
+                        'Use Flashcards, Quizzes And Exercises To Remember\nVocabulary And Apply It Correctly In TOEIC Contexts.',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
@@ -67,11 +67,11 @@ class On2Screen extends StatelessWidget {
                         children: [
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: true),
-                          const SizedBox(width: 8),
                           const DotWidget(isActive: false),
                           const SizedBox(width: 8),
-                          const DotWidget(isActive: false),         
+                          const DotWidget(isActive: true),
+                          const SizedBox(width: 8),
+                          const DotWidget(isActive: false), 
                         ],
                       ),
                     ],
@@ -93,7 +93,7 @@ class On2Screen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const On3Screen(),
+                            builder: (context) => const On4Screen(),
                           ),
                         );
                       },
