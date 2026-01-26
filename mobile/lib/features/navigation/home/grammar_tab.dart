@@ -47,7 +47,7 @@ class _GrammarTabState extends State<GrammarTab> {
       
       // Gọi API /api/grammar/lessons
       final response = await http.get(
-        Uri.parse('$API_BASE_URL/grammar/lessons?limit=50&categoryId=2'),
+        Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=1'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',

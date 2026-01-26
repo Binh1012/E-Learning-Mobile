@@ -19,33 +19,25 @@ class GrammarLessonScreen extends StatefulWidget {
 }
 
 class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
+  // --- BIẾN TRẠNG THÁI ---
   bool _isLoading = true;
+  bool _isSubmitting = false; // Flag để đợi API trả về điểm số cuối cùng
   String? _loadError;
   
   List<Map<String, dynamic>> _parts = [];
   List<Map<String, dynamic>> _allQuestions = [];
-  
-  // Store correct answers for each part
-  Map<int, dynamic> _correctAnswers = {}; // partId -> correct answers data
+  Map<int, dynamic> _correctAnswers = {}; 
   
   int _currentStep = 0;
   int _learnedSteps = 0;
-  bool _isReviewMode = false;
-  int _reviewStep = 0;
   
   Map<int, String> _selectedAnswers = {};
-  Map<int, String> _fillInAnswers = {};
   Map<int, bool> _checkedQuestions = {};
-  Map<int, bool> _answerResults = {}; // questionId -> is correct
-  Map<int, Map<String, String>> _matchingAnswers = {};
+  Map<int, bool> _answerResults = {}; 
   
-  // MATCHING specific states
-  Map<int, String?> _matchingSelectedEnglish = {}; // questionId -> selected english label
-  Map<int, Set<String>> _matchingCorrectPairs = {}; // questionId -> set of correct english labels
-  Map<int, Set<String>> _matchingWrongPairs = {}; // questionId -> set of wrong english labels
-  Map<int, Map<String, String>> _matchingWrongDetails = {}; // questionId -> {english label: wrong vietnamese word}
-  
-  final Map<int, TextEditingController> _textControllers = {};
+  Map<int, List<String>> _partAnswers = {}; 
+  Map<int, dynamic> _submissionResults = {}; 
+  Map<int, int> _theoryDisplayIndex = {}; 
 
   @override
   void initState() {
@@ -53,14 +45,7 @@ class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
     _loadLessonData();
   }
 
-  @override
-  void dispose() {
-    for (var controller in _textControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
+  // --- LOGIC TẢI DỮ LIỆU (Giữ nguyên gốc) ---
   Future<void> _loadLessonData() async {
     setState(() {
       _isLoading = true;
@@ -68,59 +53,38 @@ class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
     });
 
     try {
-      // Step 1: Load parts list
-      final partsData = await GrammarApiService.getLessonParts(
-        lessonId: widget.lessonId,
-      );
-
-      print('📚 Parts response: 200');
-
+      final partsData = await GrammarApiService.getLessonParts(lessonId: widget.lessonId);
       final parts = partsData['data'] as List;
       _parts = parts.map((p) => p as Map<String, dynamic>).toList();
 
-      // Step 2: Load details for each part (including correct answers)
       final allQuestions = <Map<String, dynamic>>[];
-      
       for (var part in _parts) {
         final partId = part['part_id'];
-        
-        // Get part details (includes questions and correct_answer_path)
         try {
-          final partDetailData = await GrammarApiService.getPartDetails(
-            partId: partId,
-          );
+          final partDetailData = await GrammarApiService.getPartDetails(partId: partId);
+          final partDetail = partDetailData['data'] as Map<String, dynamic>;
+          final questions = partDetail['questions'] as List? ?? [];
+          final correctAnswerPath = partDetail['correct_answer_path'];
+          final partDescription = part['description'];
 
-        final partDetail = partDetailData['data'] as Map<String, dynamic>;
-        final questions = partDetail['questions'] as List? ?? [];
-        final correctAnswerPath = partDetail['correct_answer_path'];
-        final partDescription = part['description'];
+          if (correctAnswerPath != null && correctAnswerPath.toString().isNotEmpty && partDescription == 'MULTIPLE_CHOICE') {
+            await _loadCorrectAnswers(partId, correctAnswerPath);
+          }
 
-        // Load correct answers if available
-        if (correctAnswerPath != null && correctAnswerPath.toString().isNotEmpty) {
-          await _loadCorrectAnswers(partId, correctAnswerPath, partDescription);
-        }
-
-        // Add questions to list
-        for (var question in questions) {
-          final questionWithPart = Map<String, dynamic>.from(question);
-          questionWithPart['part_id'] = partId;
-          questionWithPart['part_description'] = partDescription;
-          allQuestions.add(questionWithPart);
-        }
-        } catch (e) {
-          print('Error loading part $partId: $e');
-          continue;
-        }
+          for (var question in questions) {
+            final questionWithPart = Map<String, dynamic>.from(question);
+            questionWithPart['part_id'] = partId;
+            questionWithPart['part_description'] = partDescription;
+            allQuestions.add(questionWithPart);
+          }
+        } catch (e) { continue; }
       }
 
       setState(() {
         _allQuestions = allQuestions;
         _isLoading = false;
       });
-
-      print('✅ Loaded ${_parts.length} parts with ${_allQuestions.length} questions');
     } catch (e) {
-      print('❌ Error loading lesson data: $e');
       setState(() {
         _loadError = 'Error: $e';
         _isLoading = false;
@@ -128,1164 +92,255 @@ class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
     }
   }
 
-  Future<void> _loadCorrectAnswers(int partId, String correctAnswerPath, String partDescription) async {
+  Future<void> _loadCorrectAnswers(int partId, String correctAnswerPath) async {
     try {
       final content = await GrammarApiService.fetchCorrectAnswers(correctAnswerPath);
-      
-      if (partDescription == 'MULTIPLE_CHOICE') {
-        final answers = GrammarApiService.parseMultipleChoiceAnswers(content);
-        _correctAnswers[partId] = answers;
-        print('✅ Loaded ${answers.length} MULTIPLE_CHOICE answers for part $partId');
-      } else if (partDescription == 'MATCHING') {
-        final matchMap = GrammarApiService.parseMatchingAnswers(content);
-        _correctAnswers[partId] = matchMap;
-        print('✅ Loaded ${matchMap.length} MATCHING pairs for part $partId');
-      } else if (partDescription == 'FILL_IN_BLANK') {
-        final answers = GrammarApiService.parseFillInBlankAnswers(content);
-        _correctAnswers[partId] = answers;
-        print('✅ Loaded ${answers.length} FILL_IN_BLANK answers for part $partId');
-      }
+      final answers = content.trim().split('').where((e) => e.trim().isNotEmpty).map((e) => e.trim().toUpperCase()).toList();
+      _correctAnswers[partId] = answers;
     } catch (e) {
-      print('❌ Error loading correct answers for part $partId: $e');
+      print('❌ Error loading answers: $e');
     }
   }
 
-  double get _progressValue {
-    if (_isReviewMode) return 0.0;
-    if (_allQuestions.isEmpty) return 0.0;
-    return _currentStep / _allQuestions.length;
-  }
+  // --- LOGIC ĐIỀU HƯỚNG & XỬ LÝ ĐIỂM SỐ ---
+  double get _progressValue => _allQuestions.isEmpty ? 0.0 : _currentStep / _allQuestions.length;
 
-  int get _accuracy {
-    if (_answerResults.isEmpty) return 0;
-    int correct = _answerResults.values.where((c) => c).length;
-    return ((correct / _answerResults.length) * 100).round();
-  }
-
-  String get _stepText {
-    if (_isReviewMode) return 'Step 1 of ${_allQuestions.length}';
-    return 'Step ${_currentStep + 1} of ${_allQuestions.length}';
-  }
-
-  void _nextStep() {
+  void _nextStep() async {
     if (_currentStep < _allQuestions.length - 1) {
       final currentQuestion = _allQuestions[_currentStep];
-      final questionId = currentQuestion['question_id'];
-      final partDescription = currentQuestion['part_description'];
-      
-      if (partDescription == 'MULTIPLE_CHOICE' || partDescription == 'FILL_IN_BLANK') {
-        if (_checkedQuestions[questionId] != true) {
-          return;
-        }
-      } else if (partDescription == 'MATCHING') {
-        // For MATCHING, check if all pairs are found
-        final correctPairs = _matchingCorrectPairs[questionId] ?? {};
-        final displayOrders = currentQuestion['displayOrders'] as List;
-        final totalPairs = (displayOrders.length / 2).floor();
-        
-        if (correctPairs.length < totalPairs) {
-          return; // Not all pairs found yet
-        }
-      }
+      if (currentQuestion['part_description'] == 'MULTIPLE_CHOICE' && _checkedQuestions[currentQuestion['question_id']] != true) return;
       
       setState(() {
         _currentStep++;
         _learnedSteps = _currentStep;
+        _theoryDisplayIndex.clear();
       });
     } else if (_currentStep == _allQuestions.length - 1) {
+      // Khi ở câu cuối cùng và bấm Continue
       setState(() {
-        _currentStep = _allQuestions.length;
+        _isSubmitting = true; 
+        _currentStep = _allQuestions.length; // Chuyển sang màn hình kết quả
       });
+      await _submitAllPartAnswers(); // Gọi API lấy điểm
     }
   }
 
-  void _previousStep() {
-    if (_currentStep > 0 && !_isReviewMode) {
-      setState(() {
-        _currentStep--;
-      });
+  Future<void> _submitAllPartAnswers() async {
+    try {
+      for (var partId in _partAnswers.keys) {
+        final answers = _partAnswers[partId]!.join('');
+        if (answers.isNotEmpty) {
+          final result = await GrammarApiService.submitPartAnswers(
+            lessonId: widget.lessonId,
+            partId: partId,
+            answers: answers,
+          );
+          if (result != null && result['data'] != null && result['data']['data'] != null) {
+            setState(() {
+              _submissionResults[partId] = result['data']['data'];
+            });
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Submission error: $e');
+    } finally {
+      setState(() => _isSubmitting = false);
     }
   }
 
-  void _checkAnswer(int questionId, String partDescription) {
+  void _checkAnswer(int questionId) {
     final question = _allQuestions.firstWhere((q) => q['question_id'] == questionId);
     final partId = question['part_id'];
     final correctAnswersData = _correctAnswers[partId];
+    final selectedAnswer = _selectedAnswers[questionId];
 
-    if (correctAnswersData == null) {
+    if (selectedAnswer == null || correctAnswersData == null) return;
+    
+    final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
+    final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
+    
+    if (questionIndex >= 0 && questionIndex < correctAnswersData.length) {
+      bool isCorrect = selectedAnswer == correctAnswersData[questionIndex];
+      
+      if (!_partAnswers.containsKey(partId)) _partAnswers[partId] = [];
+      while (_partAnswers[partId]!.length <= questionIndex) _partAnswers[partId]!.add('');
+      _partAnswers[partId]![questionIndex] = selectedAnswer;
+      
+      // Submit từng câu lẻ cho analytics (API hiện tại của bạn)
+      GrammarApiService.submitAnswer(
+        partId: partId, 
+        questionId: questionId, 
+        selectedAnswer: selectedAnswer, 
+        quality: isCorrect ? 3 : 1
+      );
+      
       setState(() {
         _checkedQuestions[questionId] = true;
-        _answerResults[questionId] = true;
+        _answerResults[questionId] = isCorrect;
       });
-      return;
     }
-
-    bool isCorrect = false;
-    String? correctAnswer;
-
-    if (partDescription == 'MULTIPLE_CHOICE') {
-      final selectedAnswer = _selectedAnswers[questionId];
-      if (selectedAnswer == null) return;
-      
-      final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
-      final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
-      
-      if (questionIndex >= 0 && questionIndex < correctAnswersData.length) {
-        correctAnswer = correctAnswersData[questionIndex];
-        isCorrect = selectedAnswer == correctAnswer;
-        print('Question $questionId: Selected=$selectedAnswer, Correct=$correctAnswer, Result=$isCorrect');
-      }
-    } else if (partDescription == 'FILL_IN_BLANK') {
-      final answer = _fillInAnswers[questionId]?.trim().toLowerCase();
-      if (answer == null || answer.isEmpty) return;
-      
-      final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
-      final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
-      
-      if (questionIndex >= 0 && questionIndex < correctAnswersData.length) {
-        final correctAnswerStr = correctAnswersData[questionIndex];
-        if (correctAnswerStr != null) {
-          correctAnswer = correctAnswerStr;
-          isCorrect = answer == correctAnswerStr.toLowerCase();
-          print('Question $questionId: Answered="$answer", Correct="$correctAnswer", Result=$isCorrect');
-        }
-      }
-    }
-    
-    setState(() {
-      _checkedQuestions[questionId] = true;
-      _answerResults[questionId] = isCorrect;
-    });
   }
 
+  // --- CẤU TRÚC UI CHÍNH (Giữ nguyên giao diện của bạn) ---
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(
-                        color: Color(0xFF3DD598),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('Loading lesson...'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_loadError != null) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
-        body: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(_loadError!, textAlign: TextAlign.center),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: _loadLessonData,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildProgress(),
-            Expanded(child: _buildContent()),
-            _buildNavigationButtons(),
-          ],
-        ),
+      backgroundColor: const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        backgroundColor: Colors.white, elevation: 0,
+        leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.black), onPressed: () => Navigator.pop(context)),
+        title: Text(widget.grammarTitle, style: const TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.w600)),
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF3DD598)))
+          : _loadError != null
+              ? _buildErrorState()
+              : Column(
+                  children: [
+                    _buildProgressBar(),
+                    Expanded(
+                      child: _currentStep >= _allQuestions.length 
+                          ? _buildCompleteScreen() 
+                          : _buildCurrentContent(),
+                    ),
+                    _buildBottomBar(),
+                  ],
+                ),
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pop(context),
-          ),
-          Expanded(
-            child: Text(
-              _currentStep >= _allQuestions.length ? 'Lesson Complete!' : widget.grammarTitle,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgress() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
+  Widget _buildProgressBar() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                _isReviewMode ? 'Review Progress' : 'Progress',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-              ),
-              Text(
-                '${(_progressValue * 100).toInt()}%',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.black),
-              ),
+              Text('Step ${_currentStep + 1} of ${_allQuestions.length}', style: TextStyle(fontSize: 14, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+              Text('${(_progressValue * 100).toInt()}%', style: const TextStyle(fontSize: 14, color: Color(0xFF3DD598), fontWeight: FontWeight.w600)),
             ],
           ),
           const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
-              value: _progressValue,
-              backgroundColor: const Color(0xFFE0E0E0),
-              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)),
-              minHeight: 8,
+              value: _progressValue, backgroundColor: Colors.grey[200],
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF3DD598)), minHeight: 8,
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(_stepText, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              Text(
-                _isReviewMode ? 'All learned' : '$_learnedSteps learned',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF3DD598)),
-              ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildContent() {
-    if (_currentStep >= _allQuestions.length) {
-      return _buildCompleteScreen();
-    }
-
-    final question = _allQuestions[_currentStep];
-    final partDescription = question['part_description'];
-
-    if (partDescription == 'MULTIPLE_CHOICE') {
-      return _buildMultipleChoiceQuestion(question);
-    } else if (partDescription == 'FILL_IN_BLANK') {
-      return _buildFillInBlankQuestion(question);
-    } else if (partDescription == 'MATCHING') {
-      return _buildMatchingQuestion(question);
-    } else {
-      return _buildTheoryContent(question);
-    }
-  }
-
-  Widget _buildMultipleChoiceQuestion(Map<String, dynamic> question) {
-    final questionId = question['question_id'] as int;
+  // --- UI CÂU HỎI TRẮC NGHIỆM ---
+  Widget _buildMultipleChoiceContent(Map<String, dynamic> question) {
+    final questionId = question['question_id'];
     final displayOrders = question['displayOrders'] as List;
+    if (displayOrders.isEmpty) return const Center(child: Text('No question available'));
     
-    if (displayOrders.isEmpty) {
-      return const Center(child: Text('No content available'));
-    }
-
-    final questionText = _extractContent(displayOrders[0]['content_path']);
-    final options = displayOrders.skip(1).toList();
+    final questionText = displayOrders[0]['description'] ?? '';
+    final options = displayOrders.sublist(1).take(4).toList();
     final selectedAnswer = _selectedAnswers[questionId];
     final isChecked = _checkedQuestions[questionId] == true;
     final isCorrect = _answerResults[questionId];
-    
-    // Get correct answer
-    String? correctAnswer;
-    String? correctAnswerText;
-    if (isChecked && isCorrect == false) {
-      final partId = question['part_id'];
-      final correctAnswersData = _correctAnswers[partId];
-      if (correctAnswersData != null) {
-        final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
-        final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
-        if (questionIndex >= 0 && questionIndex < correctAnswersData.length) {
-          correctAnswer = correctAnswersData[questionIndex];
-          // Find correct answer text
-          final correctOptionIndex = correctAnswer!.codeUnitAt(0) - 65; // A=0, B=1, etc
-          if (correctOptionIndex >= 0 && correctOptionIndex < options.length) {
-            correctAnswerText = _extractContent(options[correctOptionIndex]['content_path']);
-          }
-        }
-      }
-    }
+
+    final partId = question['part_id'];
+    final correctAnswersData = _correctAnswers[partId];
+    final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
+    final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
+    String? correctAnswer = (correctAnswersData != null && questionIndex >= 0) ? correctAnswersData[questionIndex] : null;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Container(
-        width: double.infinity,
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4))]),
         child: Column(
           children: [
-            const Text(
-              'Bài tập trắc nghiệm',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black),
-            ),
+            const Text('Bài tập trắc nghiệm', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 24),
-            Text(
-              questionText,
-              style: const TextStyle(fontSize: 18, color: Colors.black),
-              textAlign: TextAlign.center,
-            ),
+            Text(questionText, textAlign: TextAlign.center, style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 24),
             ...options.asMap().entries.map((entry) {
-              final index = entry.key;
-              final option = entry.value;
-              final label = String.fromCharCode(65 + index);
-              final text = _extractContent(option['content_path']);
-              
+              final label = String.fromCharCode(65 + entry.key);
               bool? optionCorrect;
               if (isChecked) {
-                if (label == correctAnswer) {
-                  optionCorrect = true; // Show correct answer in green
-                } else if (label == selectedAnswer && isCorrect == false) {
-                  optionCorrect = false; // Show wrong answer in red
-                }
+                if (label == correctAnswer) optionCorrect = true;
+                else if (label == selectedAnswer && isCorrect == false) optionCorrect = false;
               }
-              
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _buildMultipleChoiceOption(
-                  label,
-                  text,
-                  selectedAnswer,
-                  !isChecked,
-                  (value) {
-                    if (!isChecked) {
-                      setState(() => _selectedAnswers[questionId] = value);
-                    }
-                  },
-                  optionCorrect,
-                ),
+                child: _buildMultipleChoiceOption(label, entry.value['description'] ?? '', selectedAnswer, !isChecked, (v) => setState(() => _selectedAnswers[questionId] = v), optionCorrect),
               );
             }).toList(),
-            if (!isChecked && selectedAnswer != null) ...[
-              const SizedBox(height: 24),
+            if (!isChecked && selectedAnswer != null)
               SizedBox(
-                width: double.infinity,
-                height: 48,
+                width: double.infinity, height: 48,
                 child: ElevatedButton(
-                  onPressed: () => _checkAnswer(questionId, 'MULTIPLE_CHOICE'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3DD598),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Kiểm tra', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  onPressed: () => _checkAnswer(questionId),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3DD598), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                  child: const Text('Kiểm tra', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
               ),
-            ],
-            if (isChecked) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isCorrect == true ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      isCorrect == true ? Icons.check_circle : Icons.cancel,
-                      color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isCorrect == true ? 'Chính xác! Làm tốt lắm!' : 'Chưa chính xác!',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
-                            ),
-                          ),
-                          if (isCorrect == false && correctAnswerText != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Đáp án đúng: $correctAnswer. $correctAnswerText',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 40),
-            Text('Tap to continue', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+            if (isChecked) _buildFeedbackArea(isCorrect, correctAnswer),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFillInBlankQuestion(Map<String, dynamic> question) {
-    final questionId = question['question_id'] as int;
-    final displayOrders = question['displayOrders'] as List;
-    
-    if (displayOrders.isEmpty) {
-      return const Center(child: Text('No content available'));
-    }
-
-    final questionText = _extractContent(displayOrders[0]['content_path']);
-    final isChecked = _checkedQuestions[questionId] == true;
-    final isCorrect = _answerResults[questionId];
-    
-    // Get correct answer
-    String? correctAnswer;
-    if (isChecked && isCorrect == false) {
-      final partId = question['part_id'];
-      final correctAnswersData = _correctAnswers[partId];
-      if (correctAnswersData != null) {
-        final questionsInPart = _allQuestions.where((q) => q['part_id'] == partId).toList();
-        final questionIndex = questionsInPart.indexWhere((q) => q['question_id'] == questionId);
-        if (questionIndex >= 0 && questionIndex < correctAnswersData.length) {
-          correctAnswer = correctAnswersData[questionIndex];
-        }
-      }
-    }
-    
-    if (!_textControllers.containsKey(questionId)) {
-      _textControllers[questionId] = TextEditingController();
-      _textControllers[questionId]!.addListener(() {
-        setState(() {
-          _fillInAnswers[questionId] = _textControllers[questionId]!.text;
-        });
-      });
-    }
-
-    final controller = _textControllers[questionId]!;
-    final hasAnswer = controller.text.isNotEmpty;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Column(
-          children: [
-            const Text('Bài tập điền từ', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black)),
-            const SizedBox(height: 24),
-            const Text('Điền từ thích hợp:', style: TextStyle(fontSize: 16, color: Colors.black), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            Text(questionText, style: const TextStyle(fontSize: 18, color: Colors.black), textAlign: TextAlign.center),
-            const SizedBox(height: 24),
-            TextField(
-              controller: controller,
-              enabled: !isChecked,
-              decoration: InputDecoration(
-                hintText: 'Nhập câu trả lời...',
-                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-            ),
-            if (!isChecked && hasAnswer) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () => _checkAnswer(questionId, 'FILL_IN_BLANK'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3DD598),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Kiểm tra', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                ),
-              ),
-            ],
-            if (isChecked) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isCorrect == true ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      isCorrect == true ? Icons.check_circle : Icons.cancel,
-                      color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isCorrect == true ? 'Chính xác! Làm tốt lắm!' : 'Chưa chính xác!',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
-                            ),
-                          ),
-                          if (isCorrect == false && correctAnswer != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Đáp án đúng: $correctAnswer',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.black87,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            const SizedBox(height: 40),
-            Text('Tap to continue', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
-          ],
-        ),
-      ),
+  Widget _buildFeedbackArea(bool? isCorrect, String? correctAnswer) {
+    return Container(
+      margin: const EdgeInsets.only(top: 16), padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: isCorrect == true ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE), borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        Icon(isCorrect == true ? Icons.check_circle : Icons.cancel, color: isCorrect == true ? Colors.green : Colors.red),
+        const SizedBox(width: 12),
+        Text(isCorrect == true ? 'Chính xác!' : 'Sai rồi. Đáp án là $correctAnswer', style: TextStyle(fontWeight: FontWeight.bold, color: isCorrect == true ? Colors.green : Colors.red)),
+      ]),
     );
   }
 
-  Widget _buildMatchingQuestion(Map<String, dynamic> question) {
-    final questionId = question['question_id'] as int;
-    final displayOrders = question['displayOrders'] as List;
-    
-    if (displayOrders.isEmpty) {
-      return const Center(child: Text('No content available'));
-    }
-
-    final englishWords = <String, String>{};
-    final vietnameseWords = <String, String>{};
-    
-    try {
-      for (var i = 0; i < displayOrders.length; i++) {
-        final contentPath = displayOrders[i]['content_path']?.toString() ?? '';
-        
-        String content;
-        if (contentPath.startsWith('http')) {
-          try {
-            final uri = Uri.parse(contentPath);
-            final segments = uri.pathSegments;
-            if (segments.isNotEmpty) {
-              content = segments.last;
-              try {
-                content = Uri.decodeComponent(content);
-              } catch (e) {
-                // Keep original if decode fails
-              }
-            } else {
-              content = contentPath;
-            }
-          } catch (e) {
-            content = contentPath.split('/').last;
-          }
-        } else {
-          content = contentPath;
-        }
-        
-        if (i % 2 == 0) {
-          final label = String.fromCharCode(65 + (i ~/ 2));
-          englishWords[label] = content;
-        } else {
-          final label = ((i ~/ 2) + 1).toString();
-          vietnameseWords[label] = content;
-        }
-      }
-    } catch (e) {
-      print('Error parsing matching question: $e');
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text('Error loading question: $e'),
-          ],
-        ),
-      );
-    }
-
-    // Initialize states
-    if (!_matchingCorrectPairs.containsKey(questionId)) {
-      _matchingCorrectPairs[questionId] = {};
-    }
-    if (!_matchingWrongPairs.containsKey(questionId)) {
-      _matchingWrongPairs[questionId] = {};
-    }
-    if (!_matchingWrongDetails.containsKey(questionId)) {
-      _matchingWrongDetails[questionId] = {};
-    }
-
-    final selectedEnglish = _matchingSelectedEnglish[questionId];
-    final correctPairs = _matchingCorrectPairs[questionId]!;
-    final wrongPairs = _matchingWrongPairs[questionId]!;
-    final wrongDetails = _matchingWrongDetails[questionId]!;
-    final totalPairs = englishWords.length;
-    final foundPairs = correctPairs.length;
-    
-    // Get correct answers map
-    final partId = question['part_id'];
-    final correctAnswersData = _correctAnswers[partId] as Map<String, String>?;
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Column(
-          children: [
-            const Text(
-              'Nối từ với nghĩa',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Đã tìm được $foundPairs/$totalPairs cặp',
-              style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 24),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'TIẾNG ANH',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[600],
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    'TIẾNG VIỆT',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey[600],
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    children: englishWords.entries.map((entry) {
-                      final label = entry.key;
-                      final word = entry.value;
-                      final isCorrect = correctPairs.contains(label);
-                      final isWrong = wrongPairs.contains(label);
-                      final isSelected = selectedEnglish == label;
-                      
-                      // Hide if correct
-                      if (isCorrect) {
-                        return const SizedBox(height: 56); // Maintain spacing
-                      }
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildMatchingOptionNew(
-                          label: label,
-                          text: word,
-                          isSelected: isSelected,
-                          isCorrect: isCorrect,
-                          isWrong: isWrong,
-                          onTap: () { // Allow selection even if wrong
-                            setState(() {
-                              if (isSelected) {
-                                _matchingSelectedEnglish[questionId] = null;
-                              } else {
-                                _matchingSelectedEnglish[questionId] = label;
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-                
-                const SizedBox(width: 16),
-                
-                Expanded(
-                  child: Column(
-                    children: vietnameseWords.entries.map((entry) {
-                      final label = entry.key;
-                      final word = entry.value;
-                      
-                      // Find if this vietnamese word is matched with a correct english word
-                      bool isCorrect = false;
-                      String? matchedEnglishLabel;
-                      
-                      if (correctAnswersData != null) {
-                        for (var engLabel in correctPairs) {
-                          final engWord = englishWords[engLabel];
-                          if (engWord != null) {
-                            final correctVietnamese = correctAnswersData[engWord.toLowerCase()];
-                            if (correctVietnamese == word) {
-                              isCorrect = true;
-                              matchedEnglishLabel = engLabel;
-                              break;
-                            }
-                          }
-                        }
-                      }
-                      
-                      // Hide if correct
-                      if (isCorrect) {
-                        return const SizedBox(height: 56);
-                      }
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildMatchingOptionNew(
-                          label: label,
-                          text: word,
-                          isSelected: false,
-                          isCorrect: false,
-                          isWrong: false,
-                          onTap: () async {
-                            if (selectedEnglish == null) return;
-                            
-                            // Check if this match is correct
-                            final englishWord = englishWords[selectedEnglish];
-                            if (englishWord == null) return;
-                            
-                            if (correctAnswersData != null) {
-                              final correctVietnamese = correctAnswersData[englishWord.toLowerCase()];
-                              final isMatchCorrect = correctVietnamese == word;
-                              
-                              if (isMatchCorrect) {
-                                // Correct match!
-                                setState(() {
-                                  correctPairs.add(selectedEnglish);
-                                  wrongPairs.remove(selectedEnglish);
-                                  wrongDetails.remove(selectedEnglish);
-                                  _matchingSelectedEnglish[questionId] = null;
-                                });
-                                
-                                // Wait 1 second then hide
-                                await Future.delayed(const Duration(seconds: 1));
-                                setState(() {
-                                  // Pairs will be hidden automatically
-                                });
-                                
-                                // Check if all pairs found
-                                if (correctPairs.length == totalPairs) {
-                                  _answerResults[questionId] = true;
-                                  _checkedQuestions[questionId] = true;
-                                }
-                              } else {
-                                // Wrong match - store the wrong answer
-                                setState(() {
-                                  wrongPairs.add(selectedEnglish);
-                                  wrongDetails[selectedEnglish] = word;
-                                  _matchingSelectedEnglish[questionId] = null; // Deselect to allow choosing another word
-                                });
-                              }
-                            }
-                          },
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-            
-            const SizedBox(height: 24),
-            
-            if (foundPairs < totalPairs)
-              Text(
-                'Chọn 1 từ tiếng Anh và 1 nghĩa tiếng Việt',
-                style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-              )
-            else
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle,
-                      color: Color(0xFF3DD598),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Hoàn thành! Bạn đã nối đúng tất cả các cặp.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF3DD598),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            
-            // Show wrong pairs details
-            if (wrongDetails.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFEBEE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Color(0xFFEF5350), size: 20),
-                        SizedBox(width: 8),
-                        Text(
-                          'Các cặp đã chọn sai:',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFEF5350),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ...wrongDetails.entries.map((entry) {
-                      final englishLabel = entry.key;
-                      final wrongVietnamese = entry.value;
-                      final englishWord = englishWords[englishLabel] ?? '';
-                      final correctVietnamese = correctAnswersData?[englishWord.toLowerCase()] ?? '';
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '• $englishWord → $wrongVietnamese (Đáp án đúng: $correctVietnamese)',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMatchingOptionNew({
-    required String label,
-    required String text,
-    required bool isSelected,
-    required bool isCorrect,
-    required bool isWrong,
-    VoidCallback? onTap,
-  }) {
-    Color backgroundColor;
-    Color borderColor;
-    
-    if (isCorrect) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else if (isWrong) {
-      backgroundColor = const Color(0xFFFFEBEE);
-      borderColor = const Color(0xFFEF5350);
-    } else if (isSelected) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else {
-      backgroundColor = Colors.white;
-      borderColor = const Color(0xFFE0E0E0);
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: borderColor,
-            width: (isSelected || isCorrect || isWrong) ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: (isSelected || isCorrect || isWrong) ? borderColor : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: (isSelected || isCorrect || isWrong) ? borderColor : const Color(0xFF9E9E9E),
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: (isSelected || isCorrect || isWrong) ? Colors.white : const Color(0xFF9E9E9E),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-            if (isCorrect)
-              const Icon(
-                Icons.check_circle,
-                color: Color(0xFF3DD598),
-                size: 20,
-              )
-            else if (isWrong)
-              const Icon(
-                Icons.cancel,
-                color: Color(0xFFEF5350),
-                size: 20,
-              )
-            else if (isSelected)
-              const Icon(
-                Icons.check,
-                color: Color(0xFF3DD598),
-                size: 20,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMatchingOption({
-    required String label,
-    required String text,
-    required bool isSelected,
-    required bool isChecked,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFE8F5E9) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF3DD598) : const Color(0xFFE0E0E0),
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF3DD598) : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? const Color(0xFF3DD598) : const Color(0xFF9E9E9E),
-                  width: 2,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : const Color(0xFF9E9E9E),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black,
-                ),
-              ),
-            ),
-            if (isSelected)
-              const Icon(
-                Icons.check,
-                color: Color(0xFF3DD598),
-                size: 20,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
+  // --- UI LÝ THUYẾT (Khôi phục toàn bộ logic Card & Helper) ---
   Widget _buildTheoryContent(Map<String, dynamic> question) {
-    return TheoryContentWidget(
-      question: question,
-      grammarTitle: widget.grammarTitle,
-    );
+    final questionId = question['question_id'];
+    final displayOrders = question['displayOrders'] as List;
+    final currentIndex = _theoryDisplayIndex[questionId] ?? 0;
+    if (displayOrders.isEmpty) return const Center(child: Text('No content'));
+    return Center(child: _buildTheoryDisplayContent(displayOrders[currentIndex], currentIndex, displayOrders.length, questionId));
   }
 
-  Widget _buildCompleteScreen() {
+  Widget _buildTheoryDisplayContent(Map<String, dynamic> displayOrder, int currentIndex, int totalDisplays, int questionId) {
+    final description = displayOrder['description'] ?? '';
+    final lines = description.split('\n');
+    final subTitle = lines.isNotEmpty ? lines[0].trim() : ''; 
+    final bodyContent = lines.length > 1 ? lines.sublist(1).join('\n').trim() : '';
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
         children: [
-          const SizedBox(height: 40),
+          Text(widget.grammarTitle, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2D3142))),
+          Text(widget.grammarLevel, style: TextStyle(fontSize: 16, color: Colors.grey[400])),
+          const SizedBox(height: 24),
           Container(
-            width: 120,
-            height: 120,
-            decoration: const BoxDecoration(color: Color(0xFF3DD598), shape: BoxShape.circle),
-            child: const Icon(Icons.check, color: Colors.white, size: 60),
-          ),
-          const SizedBox(height: 32),
-          const Text('Congratulations!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Colors.black)),
-          const SizedBox(height: 16),
-          Text('You\'ve completed the ${widget.grammarTitle}', style: TextStyle(fontSize: 16, color: Colors.grey[600]), textAlign: TextAlign.center),
-          const SizedBox(height: 32),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4))],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: const Color(0xFFF8FAFB), borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 20)]),
+            child: Column(
               children: [
-                Column(
-                  children: [
-                    Text('${_allQuestions.length}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: Color(0xFF3DD598))),
-                    Text('Questions', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                  ],
-                ),
-                Container(width: 1, height: 60, color: Colors.grey[300]),
-                Column(
-                  children: [
-                    Text('$_accuracy%', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: Colors.black)),
-                    Text('Accuracy', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                  ],
-                ),
+                Row(children: [
+                  Expanded(child: Text(subTitle, textAlign: TextAlign.center, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold), overflow: TextOverflow.fade)),
+                  _buildSmallNavButton(icon: Icons.chevron_left, onTap: currentIndex > 0 ? () => setState(() => _theoryDisplayIndex[questionId] = currentIndex - 1) : null, isActive: currentIndex > 0),
+                  const SizedBox(width: 8),
+                  _buildSmallNavButton(icon: Icons.chevron_right, onTap: currentIndex < totalDisplays - 1 ? () => setState(() => _theoryDisplayIndex[questionId] = currentIndex + 1) : null, isActive: currentIndex < totalDisplays - 1, isPrimary: true),
+                ]),
+                const SizedBox(height: 20),
+                _buildTheoryTextContent(bodyContent),
               ],
             ),
           ),
@@ -1294,378 +349,122 @@ class _GrammarLessonScreenState extends State<GrammarLessonScreen> {
     );
   }
 
-  Widget _buildMultipleChoiceOption(String label, String text, String? selectedAnswer, bool enabled, Function(String) onTap, bool? isCorrect) {
-    final isSelected = selectedAnswer == label;
-    Color backgroundColor;
-    Color borderColor;
+  Widget _buildTheoryTextContent(String content) {
+    final lines = content.split('\n');
+    return Column(children: lines.map((line) {
+      if (line.trim().isEmpty) return const SizedBox.shrink();
+      bool isFormula = line.contains('+') || line.contains('V(');
+      return isFormula ? _buildFormulaBox(line.trim()) : _buildBulletLine(line.trim());
+    }).toList());
+  }
 
-    if (isCorrect == true) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else if (isCorrect == false) {
-      backgroundColor = const Color(0xFFFFEBEE);
-      borderColor = const Color(0xFFEF5350);
-    } else if (isSelected) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else {
-      backgroundColor = Colors.white;
-      borderColor = const Color(0xFFE0E0E0);
-    }
+  Widget _buildFormulaBox(String text) {
+    return Container(
+      width: double.infinity, padding: const EdgeInsets.all(16), margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+      child: Text(text, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF2D3142)), textAlign: TextAlign.center),
+    );
+  }
 
+  Widget _buildBulletLine(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(margin: const EdgeInsets.only(top: 8, right: 12), width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF3DD598), shape: BoxShape.circle)),
+        Expanded(child: Text(text.replaceFirst(RegExp(r'^[•\-]\s*'), ''), style: const TextStyle(fontSize: 15, color: Color(0xFF4A5568), height: 1.5))),
+      ]),
+    );
+  }
+
+  Widget _buildSmallNavButton({required IconData icon, VoidCallback? onTap, bool isActive = true, bool isPrimary = false}) {
+    return InkWell(
+      onTap: onTap, borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(color: isPrimary ? const Color(0xFF3DD598) : (isActive ? Colors.white : Colors.grey[100]), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.grey[200]!)),
+        child: Icon(icon, size: 20, color: isPrimary ? Colors.white : (isActive ? Colors.black87 : Colors.grey[400])),
+      ),
+    );
+  }
+
+  // --- MÀN HÌNH HOÀN THÀNH ---
+  Widget _buildCompleteScreen() {
+    if (_isSubmitting) return const Center(child: CircularProgressIndicator(color: Color(0xFF3DD598)));
+    
+    int totalScore = 0;
+    _submissionResults.forEach((id, data) {
+      if (data != null && data['score'] != null) totalScore += int.parse(data['score'].toString());
+    });
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.check_circle_outline, size: 100, color: Color(0xFF3DD598)),
+        const SizedBox(height: 24),
+        const Text('Lesson Completed!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+        Text('Total Score: $totalScore', style: const TextStyle(fontSize: 32, color: Color(0xFF3DD598), fontWeight: FontWeight.w800)),
+        const SizedBox(height: 40),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context),
+          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3DD598), padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+          child: const Text('Back to Lessons', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ])),
+    );
+  }
+
+  // --- THANH ĐIỀU HƯỚNG DƯỚI CÙNG (Fix lỗi height -> fixedSize) ---
+  Widget _buildBottomBar() {
+    if (_currentStep >= _allQuestions.length) return const SizedBox.shrink();
+    final q = _allQuestions[_currentStep];
+    final questionId = q['question_id'];
+    bool isTheory = q['part_description'] == 'THEORY';
+    int currentIdx = _theoryDisplayIndex[questionId] ?? 0;
+    int total = isTheory ? (q['displayOrders'] as List).length : 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 45),
+      child: Row(children: [
+        if (_currentStep > 0 || (isTheory && currentIdx > 0))
+          IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () {
+            if (isTheory && currentIdx > 0) { setState(() => _theoryDisplayIndex[questionId] = currentIdx - 1); } 
+            else { setState(() => _currentStep--); }
+          }),
+        Expanded(child: ElevatedButton(
+          onPressed: (isTheory || _checkedQuestions[questionId] == true) 
+            ? () => isTheory && currentIdx < total - 1 ? setState(() => _theoryDisplayIndex[questionId] = currentIdx + 1) : _nextStep() 
+            : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF3DD598), 
+            fixedSize: const Size.fromHeight(54), // FIX LỖI Ở ĐÂY
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+          ),
+          child: const Text('Continue Learning', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        )),
+      ]),
+    );
+  }
+
+  // --- HÀM BỔ TRỢ KHÁC ---
+  Widget _buildCurrentContent() => ( _allQuestions[_currentStep]['part_description'] == 'THEORY') ? _buildTheoryContent(_allQuestions[_currentStep]) : _buildMultipleChoiceContent(_allQuestions[_currentStep]);
+  Widget _buildErrorState() => Center(child: Text(_loadError!));
+
+  Widget _buildMultipleChoiceOption(String label, String text, String? selected, bool enabled, Function(String) onTap, bool? isCorrect) {
+    final isSelected = selected == label;
     return GestureDetector(
       onTap: enabled ? () => onTap(label) : null,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: 2),
+          color: isCorrect == true ? const Color(0xFFE8F5E9) : (isCorrect == false ? const Color(0xFFFFEBEE) : Colors.white), 
+          border: Border.all(color: isSelected ? const Color(0xFF3DD598) : Colors.grey[300]!, width: 2), 
+          borderRadius: BorderRadius.circular(12)
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelected || isCorrect != null ? borderColor : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(color: isSelected || isCorrect != null ? borderColor : const Color(0xFF9E9E9E), width: 2),
-              ),
-              child: Center(
-                child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isSelected || isCorrect != null ? Colors.white : const Color(0xFF9E9E9E))),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavigationButtons() {
-    if (_currentStep >= _allQuestions.length) {
-      return Container(
-        padding: const EdgeInsets.all(20.0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
-        ),
-        child: SizedBox(
-          height: 48,
-          child: ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3DD598),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Continue Learning', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          ),
-        ),
-      );
-    }
-
-    bool canGoNext = true;
-    if (_currentStep < _allQuestions.length) {
-      final question = _allQuestions[_currentStep];
-      final questionId = question['question_id'];
-      final partDescription = question['part_description'];
-      
-      if (partDescription == 'MULTIPLE_CHOICE' || partDescription == 'FILL_IN_BLANK') {
-        canGoNext = _checkedQuestions[questionId] == true;
-      } else if (partDescription == 'MATCHING') {
-        final correctPairs = _matchingCorrectPairs[questionId] ?? {};
-        final displayOrders = question['displayOrders'] as List;
-        final totalPairs = (displayOrders.length / 2).floor();
-        canGoNext = correctPairs.length >= totalPairs;
-      }
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
-      ),
-      child: Row(
-        children: [
-          if (_currentStep > 0) ...[
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFE0E0E0)),
-              ),
-              child: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: _previousStep),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            child: SizedBox(
-              height: 48,
-              child: ElevatedButton(
-                onPressed: canGoNext ? _nextStep : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3DD598),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.grey[300],
-                ),
-                child: const Text('Continue Learning', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _extractContent(String contentPath) {
-    final uri = Uri.parse(contentPath);
-    final segments = uri.pathSegments;
-    if (segments.isNotEmpty) {
-      return Uri.decodeComponent(segments.last);
-    }
-    return contentPath;
-  }
-}
-
-// Theory Content Widget
-class TheoryContentWidget extends StatefulWidget {
-  final Map<String, dynamic> question;
-  final String grammarTitle;
-
-  const TheoryContentWidget({
-    Key? key,
-    required this.question,
-    required this.grammarTitle,
-  }) : super(key: key);
-
-  @override
-  State<TheoryContentWidget> createState() => _TheoryContentWidgetState();
-}
-
-class _TheoryContentWidgetState extends State<TheoryContentWidget> {
-  late PageController _pageController;
-  int _currentPage = 0;
-  Map<int, String> _textContents = {};
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-    _loadAllContents();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadAllContents() async {
-    final displayOrders = widget.question['displayOrders'] as List;
-    
-    for (var order in displayOrders) {
-      final contentType = order['content_type'];
-      final contentPath = order['content_path'];
-      final displayOrderId = order['display_order_id'];
-      
-      if (contentType == 'text') {
-        try {
-          final content = await GrammarApiService.fetchContent(contentPath);
-          _textContents[displayOrderId] = content;
-        } catch (e) {
-          _textContents[displayOrderId] = 'Error: $e';
-        }
-      }
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final displayOrders = widget.question['displayOrders'] as List;
-
-    if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: Color(0xFF3DD598)),
-            const SizedBox(height: 16),
-            const Text('Loading content...'),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(displayOrders.length, (index) {
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: _currentPage == index ? 24 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: _currentPage == index 
-                      ? const Color(0xFF3DD598) 
-                      : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(4),
-                ),
-              );
-            }),
-          ),
-        ),
-        
-        Expanded(
-          child: PageView.builder(
-            controller: _pageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            itemCount: displayOrders.length,
-            itemBuilder: (context, index) {
-              final order = displayOrders[index];
-              return _buildContentPage(order);
-            },
-          ),
-        ),
-        
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            _currentPage < displayOrders.length - 1 
-                ? 'Swipe to continue' 
-                : 'Tap button to continue',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[400],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildContentPage(Map<String, dynamic> order) {
-    final contentType = order['content_type'];
-    final contentPath = order['content_path'];
-    final displayOrderId = order['display_order_id'];
-    final description = order['description'];
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.grammarTitle,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-              ),
-            ),
-            
-            if (description != null && description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                description,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                ),
-              ),
-            ],
-            
-            const SizedBox(height: 24),
-            
-            if (contentType == 'text') ...[
-              Text(
-                _textContents[displayOrderId] ?? 'Loading...',
-                style: const TextStyle(
-                  fontSize: 14,
-                  height: 1.6,
-                  color: Colors.black,
-                ),
-              ),
-            ] else if (contentType == 'image') ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  contentPath,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40),
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                          color: const Color(0xFF3DD598),
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      padding: const EdgeInsets.all(40),
-                      child: Column(
-                        children: [
-                          const Icon(
-                            Icons.broken_image,
-                            size: 64,
-                            color: Colors.grey,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Failed to load image',
-                            style: TextStyle(color: Colors.grey[600]),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ],
-        ),
+        child: Row(children: [
+          CircleAvatar(radius: 16, backgroundColor: isSelected || isCorrect != null ? (isCorrect == false ? Colors.red : const Color(0xFF3DD598)) : Colors.grey[200], child: Text(label, style: TextStyle(color: isSelected || isCorrect != null ? Colors.white : Colors.black))),
+          const SizedBox(width: 16),
+          Expanded(child: Text(text)),
+        ]),
       ),
     );
   }
