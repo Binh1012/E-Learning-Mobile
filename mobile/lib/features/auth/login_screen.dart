@@ -153,20 +153,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           password: passwordController.text.trim(),
                         );
 
-                        final token = await AuthService.login(
-                          email: emailController.text.trim(),
-                          password: passwordController.text.trim(),
-                        );
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const MainNavigationScreen(),
-                          ),
-                        );
-
                         final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('remember_me', rememberMe);
 
+                        if (rememberMe) {
+                          await prefs.setBool('remember_me', true);
+                          // token đã được AuthService lưu
+                        } else {
+
+                          await AuthService.clearTokens();
+                          await prefs.setBool('remember_me', false);
+                        }
 
                         Navigator.pushReplacement(
                           context,
@@ -180,6 +176,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         );
                       }
                     },
+
+
 
                     child: const Text(
                       "Login",

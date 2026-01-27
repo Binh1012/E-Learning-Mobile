@@ -85,7 +85,7 @@ class AuthService {
 
             // Save both tokens
             if (refreshToken != null && refreshToken.isNotEmpty) {
-              await saveTokens(accessToken, refreshToken);
+              return accessToken;
             } else {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString(TOKEN_KEY, accessToken);
