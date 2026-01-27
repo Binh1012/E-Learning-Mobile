@@ -281,15 +281,6 @@ class _ReadingPracticeScreenState extends State<ReadingPracticeScreen> {
                 child: _buildMultipleChoiceOption(label, entry.value['description'] ?? '', selectedAnswer, !isChecked, (v) => setState(() => _selectedAnswers[questionId] = v), optionCorrect),
               );
             }).toList(),
-            if (!isChecked && selectedAnswer != null)
-              SizedBox(
-                width: double.infinity, height: 48,
-                child: ElevatedButton(
-                  onPressed: () => _checkAnswer(questionId),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3DD598), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: const Text('Kiểm tra', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-              ),
             if (isChecked) _buildFeedbackArea(isCorrect, correctAnswer),
           ],
         ),
@@ -423,8 +414,45 @@ class _ReadingPracticeScreenState extends State<ReadingPracticeScreen> {
     final q = _allQuestions[_currentStep];
     final questionId = q['question_id'];
     bool isTheory = q['part_description'] == 'THEORY';
+    bool isMultipleChoice = q['part_description'] == 'MULTIPLE_CHOICE';
     int currentIdx = _theoryDisplayIndex[questionId] ?? 0;
     int total = isTheory ? (q['displayOrders'] as List).length : 0;
+    
+    // Xác định text và action cho button
+    String buttonText;
+    VoidCallback? buttonAction;
+    bool isEnabled = false;
+    
+    if (isTheory) {
+      buttonText = 'Continue Learning';
+      isEnabled = true;
+      buttonAction = () {
+        if (currentIdx < total - 1) {
+          setState(() => _theoryDisplayIndex[questionId] = currentIdx + 1);
+        } else {
+          _nextStep();
+        }
+      };
+    } else if (isMultipleChoice) {
+      bool isChecked = _checkedQuestions[questionId] == true;
+      String? selectedAnswer = _selectedAnswers[questionId];
+      
+      if (!isChecked) {
+        // Chưa kiểm tra -> hiển thị button "Kiểm tra"
+        buttonText = 'Kiểm tra';
+        isEnabled = selectedAnswer != null;
+        buttonAction = () => _checkAnswer(questionId);
+      } else {
+        // Đã kiểm tra -> hiển thị button "Continue Learning"
+        buttonText = 'Continue Learning';
+        isEnabled = true;
+        buttonAction = () => _nextStep();
+      }
+    } else {
+      buttonText = 'Continue Learning';
+      isEnabled = true;
+      buttonAction = () => _nextStep();
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 45),
@@ -435,15 +463,13 @@ class _ReadingPracticeScreenState extends State<ReadingPracticeScreen> {
             else { setState(() => _currentStep--); }
           }),
         Expanded(child: ElevatedButton(
-          onPressed: (isTheory || _checkedQuestions[questionId] == true) 
-            ? () => isTheory && currentIdx < total - 1 ? setState(() => _theoryDisplayIndex[questionId] = currentIdx + 1) : _nextStep() 
-            : null,
+          onPressed: isEnabled ? buttonAction : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF3DD598), 
-            fixedSize: const Size.fromHeight(54), // FIX LỖI Ở ĐÂY
+            fixedSize: const Size.fromHeight(54),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
           ),
-          child: const Text('Continue Learning', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          child: Text(buttonText, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         )),
       ]),
     );
@@ -455,13 +481,26 @@ class _ReadingPracticeScreenState extends State<ReadingPracticeScreen> {
 
   Widget _buildMultipleChoiceOption(String label, String text, String? selected, bool enabled, Function(String) onTap, bool? isCorrect) {
     final isSelected = selected == label;
+    
+    // Xác định màu viền
+    Color borderColor;
+    if (isCorrect == true) {
+      borderColor = const Color(0xFF3DD598); // Đáp án đúng: viền xanh
+    } else if (isCorrect == false) {
+      borderColor = Colors.red; // Đáp án sai: viền đỏ
+    } else if (isSelected) {
+      borderColor = const Color(0xFF3DD598); // Được chọn nhưng chưa kiểm tra: viền xanh
+    } else {
+      borderColor = Colors.grey[300]!; // Không được chọn: viền xám
+    }
+    
     return GestureDetector(
       onTap: enabled ? () => onTap(label) : null,
       child: Container(
         padding: const EdgeInsets.all(16), margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: isCorrect == true ? const Color(0xFFE8F5E9) : (isCorrect == false ? const Color(0xFFFFEBEE) : Colors.white), 
-          border: Border.all(color: isSelected ? const Color(0xFF3DD598) : Colors.grey[300]!, width: 2), 
+          border: Border.all(color: borderColor, width: 2), 
           borderRadius: BorderRadius.circular(12)
         ),
         child: Row(children: [

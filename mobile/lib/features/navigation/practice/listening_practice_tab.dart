@@ -37,131 +37,109 @@ class _ListeningPracticeTabState extends State<ListeningPracticeTab> {
   }
 
   Future<void> _loadListeningLessons() async {
+  setState(() {
+    _isLoadingLessons = true;
+    _lessonsError = null;
+  });
+
+  try {
+    final token = await AuthService.getValidToken();
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+
+    // 1. Gọi đồng thời cả 2 category
+    final List<http.Response> responses = await Future.wait([
+      http.get(Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=4'), headers: headers),
+      http.get(Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=5'), headers: headers),
+    ]);
+
+    // Kiểm tra nếu có bất kỳ request nào bị 401 (Token hết hạn)
+    bool isUnauthorized = responses.any((r) => r.statusCode == 401);
+
+    if (isUnauthorized) {
+      // Logic Retry giống hệt code cũ của bạn
+      await AuthService.clearTokens();
+      final newToken = await AuthService.login();
+      final newHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $newToken',
+      };
+
+      final retryResponses = await Future.wait([
+        http.get(Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=4'), headers: newHeaders),
+        http.get(Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=5'), headers: newHeaders),
+      ]);
+
+      _processResponses(retryResponses);
+    } else {
+      // Nếu không bị 401, xử lý kết quả bình thường
+      _processResponses(responses);
+    }
+  } catch (e) {
+    print('❌ Error loading grammar lessons: $e');
     setState(() {
-      _isLoadingLessons = true;
-      _lessonsError = null;
+      _lessonsError = 'Error loading lessons: $e';
+      _isLoadingLessons = false;
     });
+  }
+}
 
-    try {
-      final token = await AuthService.getValidToken();
-      
-      // Gọi API /api/grammar/lessons
-      final response = await http.get(
-        Uri.parse('$API_BASE_URL/grammar/lessons?categoryId=4'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+// Tách logic xử lý data ra một hàm riêng để tránh lặp lại code (giữ nguyên logic parse của bạn)
+void _processResponses(List<http.Response> responses) {
+  List<dynamic> allRawLessons = [];
+  bool hasError = false;
+  String errorMsg = '';
 
-      print('📚 Listening Practice response: ${response.statusCode}');
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        
-        // Parse response: {statusCode: 200, message: "Success", data: {lessons: [...], pagination: {...}}}
-        if (data['statusCode'] == 200 && data['data'] != null && data['data']['lessons'] != null) {
-          final lessons = data['data']['lessons'] as List;
-          
-          setState(() {
-            _listeningLessons = lessons.asMap().entries.map((entry) {
-              final index = entry.key;
-              final lesson = entry.value;
-              
-              // Extract data
-              final title = lesson['title']?.toString() ?? 'Unknown Lesson';
-              final description = lesson['description']?.toString() ?? '';
-              final level = lesson['level'] as Map<String, dynamic>?;
-              final levelDescription = level?['description']?.toString() ?? 'Unknown Level';
-              final parts = lesson['parts'] as List? ?? [];
-              
-              // Map to UI format
-              return {
-                'lesson_id': lesson['lesson_id'],
-                'title': title,
-                'description': description,
-                'level': levelDescription,
-                'progress': 0.0, // TODO: Sẽ lấy từ API progress sau
-                'lessons': parts.length,
-                'color': _colors[index % _colors.length],
-              };
-            }).toList();
-            _isLoadingLessons = false;
-          });
-        } else {
-          setState(() {
-            _lessonsError = 'Invalid response structure';
-            _isLoadingLessons = false;
-          });
-        }
-      } else if (response.statusCode == 401) {
-        // Token expired, retry with new token
-        await AuthService.clearTokens();
-        final newToken = await AuthService.login();
-        
-        final retryResponse = await http.get(
-          Uri.parse('$API_BASE_URL/grammar/lessons?limit=20'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $newToken',
-          },
-        );
-        
-        if (retryResponse.statusCode == 200) {
-          final data = json.decode(retryResponse.body);
-          
-          if (data['statusCode'] == 200 && data['data'] != null && data['data']['lessons'] != null) {
-            final lessons = data['data']['lessons'] as List;
-            
-            setState(() {
-              _listeningLessons = lessons.asMap().entries.map((entry) {
-                final index = entry.key;
-                final lesson = entry.value;
-                
-                final title = lesson['title']?.toString() ?? 'Unknown Lesson';
-                final description = lesson['description']?.toString() ?? '';
-                final level = lesson['level'] as Map<String, dynamic>?;
-                final levelDescription = level?['description']?.toString() ?? 'Unknown Level';
-                final parts = lesson['parts'] as List? ?? [];
-                
-                return {
-                  'lesson_id': lesson['lesson_id'],
-                  'title': title,
-                  'description': description,
-                  'level': levelDescription,
-                  'progress': 0.0,
-                  'lessons': parts.length,
-                  'color': _colors[index % _colors.length],
-                };
-              }).toList();
-              _isLoadingLessons = false;
-            });
-          } else {
-            setState(() {
-              _lessonsError = 'Invalid response structure';
-              _isLoadingLessons = false;
-            });
-          }
-        } else {
-          setState(() {
-            _lessonsError = 'Failed to load lessons: ${retryResponse.statusCode}';
-            _isLoadingLessons = false;
-          });
-        }
+  for (var response in responses) {
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['statusCode'] == 200 && data['data'] != null && data['data']['lessons'] != null) {
+        allRawLessons.addAll(data['data']['lessons'] as List);
       } else {
-        setState(() {
-          _lessonsError = 'Failed to load lessons: ${response.statusCode}';
-          _isLoadingLessons = false;
-        });
+        hasError = true;
+        errorMsg = 'Invalid response structure';
       }
-    } catch (e) {
-      print('❌ Error loading listening practice: $e');
-      setState(() {
-        _lessonsError = 'Error loading lessons: $e';
-        _isLoadingLessons = false;
-      });
+    } else {
+      hasError = true;
+      errorMsg = 'Failed to load lessons: ${response.statusCode}';
     }
   }
+
+  if (hasError && allRawLessons.isEmpty) {
+    setState(() {
+      _lessonsError = errorMsg;
+      _isLoadingLessons = false;
+    });
+    return;
+  }
+
+  // Mapping dữ liệu sang UI format (Giữ nguyên logic mapping của bạn)
+  setState(() {
+    _listeningLessons = allRawLessons.asMap().entries.map((entry) {
+      final index = entry.key;
+      final lesson = entry.value;
+
+      final title = lesson['title']?.toString() ?? 'Unknown Lesson';
+      final description = lesson['description']?.toString() ?? '';
+      final level = lesson['level'] as Map<String, dynamic>?;
+      final levelDescription = level?['description']?.toString() ?? 'Unknown Level';
+      final parts = lesson['parts'] as List? ?? [];
+
+      return {
+        'lesson_id': lesson['lesson_id'],
+        'title': title,
+        'description': description,
+        'level': levelDescription,
+        'progress': 0.0,
+        'lessons': parts.length,
+        'color': _colors[index % _colors.length],
+      };
+    }).toList();
+    _isLoadingLessons = false;
+  });
+}
 
   @override
   Widget build(BuildContext context) {
