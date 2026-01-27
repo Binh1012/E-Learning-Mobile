@@ -25,6 +25,10 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
   
   Map<int, dynamic> _correctAnswers = {};
   
+  // User answers for submission
+  Map<int, String> _partAnswers = {}; // part_id -> answer string
+  Map<String, dynamic>? _submitResult; // Kết quả sau khi submit
+  
   int _currentStep = 0;
   int _learnedSteps = 0;
   bool _isReviewMode = false;
@@ -62,43 +66,38 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
     });
 
     try {
-      final partsData = await VocabularyPracticeApiService.getLessonParts(
+      // Gọi API mới - lấy toàn bộ lesson với parts và questions trong 1 lần
+      final lessonData = await VocabularyPracticeApiService.getLessonWithParts(
         lessonId: widget.lessonId,
       );
 
-      print('📚 Vocabulary parts response: 200');
+      print('📚 Vocabulary lesson response: 200');
 
-      final parts = partsData['data'] as List;
+      final lesson = lessonData['data'] as Map<String, dynamic>;
+      final parts = lesson['parts'] as List? ?? [];
+      
       _parts = parts.map((p) => p as Map<String, dynamic>).toList();
 
       final allQuestions = <Map<String, dynamic>>[];
       
+      // Duyệt qua từng part để lấy questions
       for (var part in _parts) {
         final partId = part['part_id'];
-        
-        try {
-          final partDetailData = await VocabularyPracticeApiService.getPartDetails(
-            partId: partId,
-          );
+        final partDescription = part['description'];
+        final correctAnswerPath = part['correct_answer_path'];
+        final questions = part['questions'] as List? ?? [];
 
-          final partDetail = partDetailData['data'] as Map<String, dynamic>;
-          final questions = partDetail['questions'] as List? ?? [];
-          final correctAnswerPath = partDetail['correct_answer_path'];
-          final partDescription = part['description'];
+        // Load correct answers cho part này
+        if (correctAnswerPath != null && correctAnswerPath.toString().isNotEmpty) {
+          await _loadCorrectAnswers(partId, correctAnswerPath, partDescription);
+        }
 
-          if (correctAnswerPath != null && correctAnswerPath.toString().isNotEmpty) {
-            await _loadCorrectAnswers(partId, correctAnswerPath, partDescription);
-          }
-
-          for (var question in questions) {
-            final questionWithPart = Map<String, dynamic>.from(question);
-            questionWithPart['part_id'] = partId;
-            questionWithPart['part_description'] = partDescription;
-            allQuestions.add(questionWithPart);
-          }
-        } catch (e) {
-          print('Error loading part $partId: $e');
-          continue;
+        // Thêm questions vào danh sách
+        for (var question in questions) {
+          final questionWithPart = Map<String, dynamic>.from(question);
+          questionWithPart['part_id'] = partId;
+          questionWithPart['part_description'] = partDescription;
+          allQuestions.add(questionWithPart);
         }
       }
 
@@ -145,12 +144,6 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
     return _currentStep / _allQuestions.length;
   }
 
-  int get _accuracy {
-    if (_answerResults.isEmpty) return 0;
-    int correct = _answerResults.values.where((c) => c).length;
-    return ((correct / _answerResults.length) * 100).round();
-  }
-
   String get _stepText {
     if (_isReviewMode) return 'Step 1 of ${_allQuestions.length}';
     return 'Step ${_currentStep + 1} of ${_allQuestions.length}';
@@ -168,10 +161,12 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
         }
       } else if (partDescription == 'MATCHING') {
         final correctPairs = _matchingCorrectPairs[questionId] ?? {};
+        final wrongPairs = _matchingWrongPairs[questionId] ?? {};
         final displayOrders = currentQuestion['displayOrders'] as List;
         final totalPairs = (displayOrders.length / 2).floor();
         
-        if (correctPairs.length < totalPairs) {
+        final totalMatched = correctPairs.length + wrongPairs.length;
+        if (totalMatched < totalPairs) {
           return;
         }
       }
@@ -181,9 +176,103 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
         _learnedSteps = _currentStep;
       });
     } else if (_currentStep == _allQuestions.length - 1) {
+      // Hoàn thành lesson, submit answers
+      _submitLesson();
+    }
+  }
+
+  Future<void> _submitLesson() async {
+    // Collect answers for each part
+    _collectPartAnswers();
+    
+    // Submit to API
+    try {
+      final answers = _partAnswers.entries.map((entry) {
+        return {
+          'part_id': entry.key,
+          'answer': entry.value,
+        };
+      }).toList();
+      
+      print('📤 Submitting lesson ${widget.lessonId} with ${answers.length} parts');
+      
+      final result = await VocabularyPracticeApiService.submitLesson(
+        lessonId: widget.lessonId,
+        answers: answers,
+      );
+      
+      setState(() {
+        _submitResult = result['data'];
+        _currentStep = _allQuestions.length;
+      });
+      
+      print('✅ Lesson submitted successfully. Score: ${_submitResult!['total_score']}');
+    } catch (e) {
+      print('❌ Error submitting lesson: $e');
+      // Still show complete screen even if submit fails
       setState(() {
         _currentStep = _allQuestions.length;
       });
+    }
+  }
+
+  void _collectPartAnswers() {
+    // Group questions by part_id
+    Map<int, List<Map<String, dynamic>>> questionsByPart = {};
+    for (var question in _allQuestions) {
+      final partId = question['part_id'] as int;
+      if (!questionsByPart.containsKey(partId)) {
+        questionsByPart[partId] = [];
+      }
+      questionsByPart[partId]!.add(question);
+    }
+    
+    // Build answer string for each part
+    for (var entry in questionsByPart.entries) {
+      final partId = entry.key;
+      final questions = entry.value;
+      
+      if (questions.isEmpty) continue;
+      
+      final partDescription = questions[0]['part_description'];
+      
+      if (partDescription == 'MULTIPLE_CHOICE') {
+        // Format: A,B,C,D
+        final answers = questions.map((q) {
+          final questionId = q['question_id'];
+          return _selectedAnswers[questionId] ?? '';
+        }).toList();
+        
+        final answer = answers.join(',');
+        _partAnswers[partId] = answer;
+        print('📝 Part $partId (MULTIPLE_CHOICE) answer: $answer');
+      } else if (partDescription == 'MATCHING') {
+        // Format: word1-nghĩa1,word2-nghĩa2
+        final pairs = <String>[];
+        final questionId = questions[0]['question_id']; // MATCHING chỉ có 1 question
+        final wrongDetails = _matchingWrongDetails[questionId] ?? {};
+        
+        // wrongDetails structure: {vietnamese: english}
+        for (var entry in wrongDetails.entries) {
+          final vietnamese = entry.key.trim();
+          final english = entry.value.trim();
+          pairs.add('$english-$vietnamese');
+        }
+        
+        final answer = pairs.join(',');
+        _partAnswers[partId] = answer;
+        print('📝 Part $partId (MATCHING) answer: $answer');
+      } else if (partDescription == 'FILL_IN_BLANK') {
+        // Format: word1,word2
+        final answers = questions.map((q) {
+          final questionId = q['question_id'];
+          return _fillInAnswers[questionId]?.trim() ?? '';
+        }).toList();
+        
+        final answer = answers.join(',');
+        _partAnswers[partId] = answer;
+        print('📝 Part $partId (FILL_IN_BLANK) answer: $answer');
+      }
     }
   }
 
@@ -464,23 +553,6 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                 }, optionCorrect),
               );
             }).toList(),
-            if (!isChecked && selectedAnswer != null) ...[
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () => _checkAnswer(questionId, 'MULTIPLE_CHOICE'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3DD598),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Kiểm tra', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                ),
-              ),
-            ],
             if (isChecked) ...[
               const SizedBox(height: 16),
               Container(
@@ -499,12 +571,19 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isCorrect == true ? 'Chính xác! Làm tốt lắm!' : 'Chưa chính xác!',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350)),
+                            isCorrect == true ? 'Chính xác!' : 'Chưa đúng',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
+                            ),
                           ),
                           if (isCorrect == false && correctAnswerText != null) ...[
                             const SizedBox(height: 4),
-                            Text('Đáp án đúng: $correctAnswer. $correctAnswerText', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                            Text(
+                              'Đáp án đúng: $correctAnswerText',
+                              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                            ),
                           ],
                         ],
                       ),
@@ -513,8 +592,79 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 40),
-            Text('Tap to continue', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultipleChoiceOption(String label, String text, String? selectedAnswer, bool enabled, Function(String) onSelect, bool? isCorrect) {
+    final isSelected = selectedAnswer == label;
+    
+    Color borderColor;
+    Color backgroundColor;
+    Color textColor;
+    
+    if (isCorrect == true) {
+      borderColor = const Color(0xFF3DD598);
+      backgroundColor = const Color(0xFFE8F5E9);
+      textColor = const Color(0xFF3DD598);
+    } else if (isCorrect == false) {
+      borderColor = const Color(0xFFEF5350);
+      backgroundColor = const Color(0xFFFFEBEE);
+      textColor = const Color(0xFFEF5350);
+    } else if (isSelected) {
+      borderColor = const Color(0xFF3DD598);
+      backgroundColor = const Color(0xFFF0FFF4);
+      textColor = Colors.black;
+    } else {
+      borderColor = const Color(0xFFE0E0E0);
+      backgroundColor = Colors.white;
+      textColor = Colors.black;
+    }
+
+    return InkWell(
+      onTap: enabled ? () => onSelect(label) : null,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          border: Border.all(color: borderColor, width: 2),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isCorrect != null ? (isCorrect ? const Color(0xFF3DD598) : const Color(0xFFEF5350)) : (isSelected ? const Color(0xFF3DD598) : Colors.transparent),
+                border: Border.all(color: isCorrect != null ? (isCorrect ? const Color(0xFF3DD598) : const Color(0xFFEF5350)) : (isSelected ? const Color(0xFF3DD598) : const Color(0xFFBDBDBD)), width: 2),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: isCorrect != null ? Colors.white : (isSelected ? Colors.white : const Color(0xFFBDBDBD)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 16, color: textColor),
+              ),
+            ),
+            if (isCorrect != null)
+              Icon(
+                isCorrect ? Icons.check_circle : Icons.cancel,
+                color: isCorrect ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
+              ),
           ],
         ),
       ),
@@ -530,6 +680,11 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
     }
 
     final questionText = _extractContent(displayOrders[0]['content_path']);
+    
+    if (!_textControllers.containsKey(questionId)) {
+      _textControllers[questionId] = TextEditingController();
+    }
+    
     final isChecked = _checkedQuestions[questionId] == true;
     final isCorrect = _answerResults[questionId];
     
@@ -545,16 +700,6 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
         }
       }
     }
-    
-    if (!_textControllers.containsKey(questionId)) {
-      _textControllers[questionId] = TextEditingController();
-      _textControllers[questionId]!.addListener(() {
-        setState(() => _fillInAnswers[questionId] = _textControllers[questionId]!.text);
-      });
-    }
-
-    final controller = _textControllers[questionId]!;
-    final hasAnswer = controller.text.isNotEmpty;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -570,39 +715,41 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
           children: [
             const Text('Bài tập điền từ', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black)),
             const SizedBox(height: 24),
-            const Text('Điền từ thích hợp:', style: TextStyle(fontSize: 16, color: Colors.black), textAlign: TextAlign.center),
-            const SizedBox(height: 16),
             Text(questionText, style: const TextStyle(fontSize: 18, color: Colors.black), textAlign: TextAlign.center),
             const SizedBox(height: 24),
             TextField(
-              controller: controller,
+              controller: _textControllers[questionId],
               enabled: !isChecked,
+              onChanged: (value) {
+                setState(() {
+                  _fillInAnswers[questionId] = value;
+                });
+              },
               decoration: InputDecoration(
-                hintText: 'Nhập câu trả lời...',
-                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                hintText: 'Nhập câu trả lời của bạn...',
                 filled: true,
-                fillColor: const Color(0xFFF5F5F5),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              ),
-            ),
-            if (!isChecked && hasAnswer) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  onPressed: () => _checkAnswer(questionId, 'FILL_IN_BLANK'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3DD598),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                fillColor: isChecked ? (isCorrect == true ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE)) : const Color(0xFFF5F5F5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE0E0E0), width: 2),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF3DD598), width: 2),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
+                    width: 2,
                   ),
-                  child: const Text('Kiểm tra', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
               ),
-            ],
+            ),
             if (isChecked) ...[
               const SizedBox(height: 16),
               Container(
@@ -621,12 +768,19 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            isCorrect == true ? 'Chính xác! Làm tốt lắm!' : 'Chưa chính xác!',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350)),
+                            isCorrect == true ? 'Chính xác!' : 'Chưa đúng',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: isCorrect == true ? const Color(0xFF3DD598) : const Color(0xFFEF5350),
+                            ),
                           ),
                           if (isCorrect == false && correctAnswer != null) ...[
                             const SizedBox(height: 4),
-                            Text('Đáp án đúng: $correctAnswer', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                            Text(
+                              'Đáp án đúng: $correctAnswer',
+                              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                            ),
                           ],
                         ],
                       ),
@@ -635,8 +789,6 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 40),
-            Text('Tap to continue', style: TextStyle(fontSize: 14, color: Colors.grey[400])),
           ],
         ),
       ),
@@ -647,77 +799,26 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
     final questionId = question['question_id'] as int;
     final displayOrders = question['displayOrders'] as List;
     
-    if (displayOrders.isEmpty) {
-      return const Center(child: Text('No content available'));
+    if (displayOrders.length < 2) {
+      return const Center(child: Text('Insufficient data for matching'));
     }
 
-    final englishWords = <String, String>{};
-    final vietnameseWords = <String, String>{};
+    final englishWords = <String>[];
+    final vietnameseWords = <String>[];
     
-    try {
-      for (var i = 0; i < displayOrders.length; i++) {
-        final contentPath = displayOrders[i]['content_path']?.toString() ?? '';
-        
-        String content;
-        if (contentPath.startsWith('http')) {
-          try {
-            final uri = Uri.parse(contentPath);
-            final segments = uri.pathSegments;
-            if (segments.isNotEmpty) {
-              content = segments.last;
-              try {
-                content = Uri.decodeComponent(content);
-              } catch (e) {}
-            } else {
-              content = contentPath;
-            }
-          } catch (e) {
-            content = contentPath.split('/').last;
-          }
-        } else {
-          content = contentPath;
-        }
-        
-        if (i % 2 == 0) {
-          final label = String.fromCharCode(65 + (i ~/ 2));
-          englishWords[label] = content;
-        } else {
-          final label = ((i ~/ 2) + 1).toString();
-          vietnameseWords[label] = content;
-        }
+    for (int i = 0; i < displayOrders.length; i++) {
+      final content = _extractContent(displayOrders[i]['content_path']);
+      if (i % 2 == 0) {
+        englishWords.add(content);
+      } else {
+        vietnameseWords.add(content);
       }
-    } catch (e) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text('Error loading question: $e'),
-          ],
-        ),
-      );
-    }
-
-    if (!_matchingCorrectPairs.containsKey(questionId)) {
-      _matchingCorrectPairs[questionId] = {};
-    }
-    if (!_matchingWrongPairs.containsKey(questionId)) {
-      _matchingWrongPairs[questionId] = {};
-    }
-    if (!_matchingWrongDetails.containsKey(questionId)) {
-      _matchingWrongDetails[questionId] = {};
     }
 
     final selectedEnglish = _matchingSelectedEnglish[questionId];
-    final correctPairs = _matchingCorrectPairs[questionId]!;
-    final wrongPairs = _matchingWrongPairs[questionId]!;
-    final wrongDetails = _matchingWrongDetails[questionId]!;
-    final totalPairs = englishWords.length;
-    final foundPairs = correctPairs.length;
-    
-    final partId = question['part_id'];
-    final correctAnswersData = _correctAnswers[partId] as Map<String, String>?;
+    final correctPairs = _matchingCorrectPairs[questionId] ?? {};
+    final wrongPairs = _matchingWrongPairs[questionId] ?? {};
+    final wrongDetails = _matchingWrongDetails[questionId] ?? {};
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -730,267 +831,233 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4))],
         ),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Nối từ với nghĩa', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black)),
             const SizedBox(height: 8),
-            Text('Đã tìm được $foundPairs/$totalPairs cặp', style: const TextStyle(fontSize: 14, color: Colors.black, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 24),
-            
-            Row(
-              children: [
-                Expanded(
-                  child: Text('TIẾNG ANH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[600], letterSpacing: 0.5)),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text('TIẾNG VIỆT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey[600], letterSpacing: 0.5)),
-                ),
-              ],
+            Text(
+              'Chọn từ và nghĩa tương ứng',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Cột tiếng Anh
                 Expanded(
                   child: Column(
-                    children: englishWords.entries.map((entry) {
-                      final label = entry.key;
-                      final word = entry.value;
-                      final isCorrect = correctPairs.contains(label);
-                      final isWrong = wrongPairs.contains(label);
-                      final isSelected = selectedEnglish == label;
-                      
-                      if (isCorrect) return const SizedBox(height: 56);
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildMatchingOptionNew(
-                          label: label,
-                          text: word,
-                          isSelected: isSelected,
-                          isCorrect: isCorrect,
-                          isWrong: isWrong,
-                          onTap: () {
-                            setState(() {
-                              if (isSelected) {
-                                _matchingSelectedEnglish[questionId] = null;
-                              } else {
-                                _matchingSelectedEnglish[questionId] = label;
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    }).toList(),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('TIẾNG ANH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey, letterSpacing: 0.5)),
+                      const SizedBox(height: 12),
+                      ...englishWords.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final word = entry.value;
+                        final label = String.fromCharCode(65 + index); // A, B, C, D, E
+                        final isSelected = selectedEnglish == word;
+                        final isCorrectPair = correctPairs.contains(word);
+                        final isWrongPair = wrongPairs.contains(word);
+                        
+                        Color backgroundColor;
+                        Color borderColor;
+                        Color textColor;
+                        
+                        if (isCorrectPair) {
+                          backgroundColor = const Color(0xFFE8F5E9);
+                          borderColor = const Color(0xFF3DD598);
+                          textColor = const Color(0xFF3DD598);
+                        } else if (isWrongPair) {
+                          backgroundColor = const Color(0xFFFFEBEE);
+                          borderColor = const Color(0xFFEF5350);
+                          textColor = Colors.black;
+                        } else if (isSelected) {
+                          backgroundColor = const Color(0xFFF0FFF4);
+                          borderColor = const Color(0xFF3DD598);
+                          textColor = Colors.black;
+                        } else {
+                          backgroundColor = Colors.white;
+                          borderColor = const Color(0xFFE0E0E0);
+                          textColor = Colors.black;
+                        }
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            onTap: (isCorrectPair || isWrongPair) ? null : () {
+                              setState(() {
+                                _matchingSelectedEnglish[questionId] = word;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: backgroundColor,
+                                border: Border.all(color: borderColor, width: 2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: isCorrectPair ? const Color(0xFF3DD598) : (isSelected ? const Color(0xFF3DD598) : Colors.transparent),
+                                      border: Border.all(
+                                        color: isCorrectPair ? const Color(0xFF3DD598) : (isSelected ? const Color(0xFF3DD598) : const Color(0xFFBDBDBD)),
+                                        width: 2,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isCorrectPair || isSelected ? Colors.white : const Color(0xFFBDBDBD),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      word,
+                                      style: TextStyle(fontSize: 15, color: textColor, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
                   ),
                 ),
                 
                 const SizedBox(width: 16),
                 
+                // Cột tiếng Việt
                 Expanded(
                   child: Column(
-                    children: vietnameseWords.entries.map((entry) {
-                      final label = entry.key;
-                      final word = entry.value;
-                      
-                      bool isCorrect = false;
-                      
-                      if (correctAnswersData != null) {
-                        for (var engLabel in correctPairs) {
-                          final engWord = englishWords[engLabel];
-                          if (engWord != null) {
-                            final correctVietnamese = correctAnswersData[engWord.toLowerCase()];
-                            if (correctVietnamese == word) {
-                              isCorrect = true;
-                              break;
-                            }
-                          }
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('TIẾNG VIỆT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey, letterSpacing: 0.5)),
+                      const SizedBox(height: 12),
+                      ...vietnameseWords.asMap().entries.map((entry) {
+                        final index = entry.key;
+                        final word = entry.value;
+                        final label = '${index + 1}'; // 1, 2, 3, 4, 5
+                        final matchedEnglish = wrongDetails[word];
+                        final isCorrectPair = matchedEnglish != null && correctPairs.contains(matchedEnglish);
+                        final isWrongPair = matchedEnglish != null && wrongPairs.contains(matchedEnglish);
+                        
+                        Color backgroundColor = Colors.white;
+                        Color borderColor = const Color(0xFFE0E0E0);
+                        Color textColor = Colors.black;
+                        
+                        if (isCorrectPair) {
+                          backgroundColor = const Color(0xFFE8F5E9);
+                          borderColor = const Color(0xFF3DD598);
+                          textColor = const Color(0xFF3DD598);
+                        } else if (isWrongPair) {
+                          backgroundColor = const Color(0xFFFFEBEE);
+                          borderColor = const Color(0xFFEF5350);
+                          textColor = Colors.black;
                         }
-                      }
-                      
-                      if (isCorrect) return const SizedBox(height: 56);
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _buildMatchingOptionNew(
-                          label: label,
-                          text: word,
-                          isSelected: false,
-                          isCorrect: false,
-                          isWrong: false,
-                          onTap: () async {
-                            if (selectedEnglish == null) return;
-                            
-                            final englishWord = englishWords[selectedEnglish];
-                            if (englishWord == null) return;
-                            
-                            if (correctAnswersData != null) {
-                              final correctVietnamese = correctAnswersData[englishWord.toLowerCase()];
-                              final isMatchCorrect = correctVietnamese == word;
-                              
-                              if (isMatchCorrect) {
-                                setState(() {
-                                  correctPairs.add(selectedEnglish);
-                                  wrongPairs.remove(selectedEnglish);
-                                  wrongDetails.remove(selectedEnglish);
-                                  _matchingSelectedEnglish[questionId] = null;
-                                });
-                                
-                                await Future.delayed(const Duration(seconds: 1));
-                                setState(() {});
-                                
-                                if (correctPairs.length == totalPairs) {
-                                  _answerResults[questionId] = true;
-                                  _checkedQuestions[questionId] = true;
-                                }
-                              } else {
-                                setState(() {
-                                  wrongPairs.add(selectedEnglish);
-                                  wrongDetails[selectedEnglish] = word;
-                                  _matchingSelectedEnglish[questionId] = null;
-                                });
-                              }
-                            }
-                          },
-                        ),
-                      );
-                    }).toList(),
+                        
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            onTap: (selectedEnglish == null || isCorrectPair || isWrongPair) ? null : () {
+                              _checkMatchingPair(questionId, selectedEnglish!, word);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                              decoration: BoxDecoration(
+                                color: backgroundColor,
+                                border: Border.all(color: borderColor, width: 2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      color: isCorrectPair ? const Color(0xFF3DD598) : Colors.transparent,
+                                      border: Border.all(
+                                        color: isCorrectPair ? const Color(0xFF3DD598) : const Color(0xFFBDBDBD),
+                                        width: 2,
+                                      ),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: isCorrectPair ? Colors.white : const Color(0xFFBDBDBD),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      word,
+                                      style: TextStyle(fontSize: 15, color: textColor, fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ],
                   ),
                 ),
               ],
             ),
             
-            const SizedBox(height: 24),
-            
-            if (foundPairs < totalPairs)
-              Text('Chọn 1 từ tiếng Anh và 1 nghĩa tiếng Việt', style: TextStyle(fontSize: 14, color: Colors.grey[400]))
-            else
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Color(0xFF3DD598)),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Hoàn thành! Bạn đã nối đúng tất cả các cặp.',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF3DD598)),
-                      ),
-                    ),
-                  ],
-                ),
+            const SizedBox(height: 20),
+            Center(
+              child: Text(
+                'Tap to match',
+                style: TextStyle(fontSize: 14, color: Colors.grey[400]),
               ),
-            
-            if (wrongDetails.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFEBEE),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Color(0xFFEF5350), size: 20),
-                        SizedBox(width: 8),
-                        Text('Các cặp đã chọn sai:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFFEF5350))),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ...wrongDetails.entries.map((entry) {
-                      final englishLabel = entry.key;
-                      final wrongVietnamese = entry.value;
-                      final englishWord = englishWords[englishLabel] ?? '';
-                      final correctVietnamese = correctAnswersData?[englishWord.toLowerCase()] ?? '';
-                      
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '• $englishWord → $wrongVietnamese (Đáp án đúng: $correctVietnamese)',
-                          style: const TextStyle(fontSize: 12, color: Colors.black87),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMatchingOptionNew({
-    required String label,
-    required String text,
-    required bool isSelected,
-    required bool isCorrect,
-    required bool isWrong,
-    VoidCallback? onTap,
-  }) {
-    Color backgroundColor;
-    Color borderColor;
-    
-    if (isCorrect) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else if (isWrong) {
-      backgroundColor = const Color(0xFFFFEBEE);
-      borderColor = const Color(0xFFEF5350);
-    } else if (isSelected) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else {
-      backgroundColor = Colors.white;
-      borderColor = const Color(0xFFE0E0E0);
-    }
+  void _checkMatchingPair(int questionId, String english, String vietnamese) {
+    final question = _allQuestions.firstWhere((q) => q['question_id'] == questionId);
+    final partId = question['part_id'];
+    final correctAnswersData = _correctAnswers[partId] as Map<String, String>?;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: (isSelected || isCorrect || isWrong) ? 2 : 1),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: (isSelected || isCorrect || isWrong) ? borderColor : Colors.transparent,
-                shape: BoxShape.circle,
-                border: Border.all(color: (isSelected || isCorrect || isWrong) ? borderColor : const Color(0xFF9E9E9E), width: 2),
-              ),
-              child: Center(
-                child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: (isSelected || isCorrect || isWrong) ? Colors.white : const Color(0xFF9E9E9E))),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(text, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black)),
-            ),
-            if (isCorrect)
-              const Icon(Icons.check_circle, color: Color(0xFF3DD598), size: 20)
-            else if (isWrong)
-              const Icon(Icons.cancel, color: Color(0xFFEF5350), size: 20)
-            else if (isSelected)
-              const Icon(Icons.check, color: Color(0xFF3DD598), size: 20),
-          ],
-        ),
-      ),
-    );
+    if (correctAnswersData == null) return;
+
+    final isCorrect = correctAnswersData[english] == vietnamese;
+
+    setState(() {
+      if (isCorrect) {
+        // Đúng: Thêm vào correctPairs, hiển thị màu xanh vĩnh viễn
+        _matchingCorrectPairs[questionId] = (_matchingCorrectPairs[questionId] ?? {})..add(english);
+        _matchingWrongDetails[questionId] = (_matchingWrongDetails[questionId] ?? {})..[vietnamese] = english;
+      } else {
+        // Sai: Thêm vào wrongPairs, hiển thị nền đỏ vĩnh viễn
+        _matchingWrongPairs[questionId] = (_matchingWrongPairs[questionId] ?? {})..add(english);
+        _matchingWrongDetails[questionId] = (_matchingWrongDetails[questionId] ?? {})..[vietnamese] = english;
+      }
+      _matchingSelectedEnglish[questionId] = null;
+    });
   }
 
   Widget _buildTheoryContent(Map<String, dynamic> question) {
@@ -1001,99 +1068,141 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
   }
 
   Widget _buildCompleteScreen() {
+    // Calculate score from API result
+    double totalScore = 0;
+    double maxScore = _parts.length * 100.0;
+    
+    if (_submitResult != null && _submitResult!['part_results'] != null) {
+      final partResults = _submitResult!['part_results'] as List;
+      for (var result in partResults) {
+        totalScore += (result['score'] as num).toDouble();
+      }
+    }
+    
+    final scorePercent = maxScore > 0 ? ((totalScore / maxScore) * 100).round() : 0;
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
-      child: Column(
-        children: [
-          const SizedBox(height: 40),
-          Container(
-            width: 120,
-            height: 120,
-            decoration: const BoxDecoration(color: Color(0xFF3DD598), shape: BoxShape.circle),
-            child: const Icon(Icons.check, color: Colors.white, size: 60),
-          ),
-          const SizedBox(height: 32),
-          const Text('Congratulations!', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: Colors.black)),
-          const SizedBox(height: 16),
-          Text('You\'ve completed the ${widget.vocabularyTitle}', style: TextStyle(fontSize: 16, color: Colors.grey[600]), textAlign: TextAlign.center),
-          const SizedBox(height: 32),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4))],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  children: [
-                    Text('${_allQuestions.length}', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: Color(0xFF3DD598))),
-                    Text('Questions', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                  ],
-                ),
-                Container(width: 1, height: 60, color: Colors.grey[300]),
-                Column(
-                  children: [
-                    Text('$_accuracy%', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700, color: Colors.black)),
-                    Text('Accuracy', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMultipleChoiceOption(String label, String text, String? selectedAnswer, bool enabled, Function(String) onTap, bool? isCorrect) {
-    final isSelected = selectedAnswer == label;
-    Color backgroundColor;
-    Color borderColor;
-
-    if (isCorrect == true) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else if (isCorrect == false) {
-      backgroundColor = const Color(0xFFFFEBEE);
-      borderColor = const Color(0xFFEF5350);
-    } else if (isSelected) {
-      backgroundColor = const Color(0xFFE8F5E9);
-      borderColor = const Color(0xFF3DD598);
-    } else {
-      backgroundColor = Colors.white;
-      borderColor = const Color(0xFFE0E0E0);
-    }
-
-    return GestureDetector(
-      onTap: enabled ? () => onTap(label) : null,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor, width: 2),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4))],
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: isSelected || isCorrect != null ? borderColor : Colors.transparent,
+              width: 80,
+              height: 80,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE8F5E9),
                 shape: BoxShape.circle,
-                border: Border.all(color: isSelected || isCorrect != null ? borderColor : const Color(0xFF9E9E9E), width: 2),
               ),
-              child: Center(
-                child: Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isSelected || isCorrect != null ? Colors.white : const Color(0xFF9E9E9E))),
+              child: const Icon(Icons.check_circle, size: 48, color: Color(0xFF3DD598)),
+            ),
+            const SizedBox(height: 24),
+            const Text('Hoàn thành!', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.black)),
+            const SizedBox(height: 8),
+            Text(
+              'Bạn đã hoàn thành bài học',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  Column(
+                    children: [
+                      Text(
+                        '${_parts.length}',
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.black),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Parts', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                    ],
+                  ),
+                  Container(width: 1, height: 40, color: Colors.grey[300]),
+                  Column(
+                    children: [
+                      Text(
+                        '$scorePercent%',
+                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFF3DD598)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Score', style: TextStyle(fontSize: 14, color: Colors.grey[600])),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500))),
+            if (_submitResult != null && _submitResult!['part_results'] != null) ...[
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chi tiết từng phần:',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey[700]),
+                    ),
+                    const SizedBox(height: 12),
+                    ...(_submitResult!['part_results'] as List).map((result) {
+                      final partNumber = result['part_number'];
+                      final correctAnswers = result['correct_answers'];
+                      final totalQuestions = result['total_questions'];
+                      final score = (result['score'] as num).toDouble().toStringAsFixed(0);
+                      
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Part $partNumber:',
+                              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            ),
+                            Text(
+                              '$correctAnswers/$totalQuestions ($score/100)',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF3DD598),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Hoàn thành', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
           ],
         ),
       ),
@@ -1102,50 +1211,65 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
 
   Widget _buildNavigationButtons() {
     if (_currentStep >= _allQuestions.length) {
-      return Container(
-        padding: const EdgeInsets.all(20.0),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
-        ),
-        child: SizedBox(
-          height: 48,
-          child: ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3DD598),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: const Text('Continue Learning', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-          ),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
-    bool canGoNext = true;
-    if (_currentStep < _allQuestions.length) {
-      final question = _allQuestions[_currentStep];
-      final questionId = question['question_id'];
-      final partDescription = question['part_description'];
+    final currentQuestion = _allQuestions[_currentStep];
+    final questionId = currentQuestion['question_id'];
+    final partDescription = currentQuestion['part_description'];
+    
+    bool canGoNext = false;
+    bool isChecked = false;
+    String buttonText = 'Kiểm tra';
+    VoidCallback? buttonAction;
+    
+    if (partDescription == 'MULTIPLE_CHOICE') {
+      isChecked = _checkedQuestions[questionId] == true;
+      final hasAnswer = _selectedAnswers[questionId] != null;
       
-      if (partDescription == 'MULTIPLE_CHOICE' || partDescription == 'FILL_IN_BLANK') {
-        canGoNext = _checkedQuestions[questionId] == true;
-      } else if (partDescription == 'MATCHING') {
-        final correctPairs = _matchingCorrectPairs[questionId] ?? {};
-        final displayOrders = question['displayOrders'] as List;
-        final totalPairs = (displayOrders.length / 2).floor();
-        canGoNext = correctPairs.length >= totalPairs;
+      if (!isChecked && hasAnswer) {
+        buttonText = 'Kiểm tra';
+        buttonAction = () => _checkAnswer(questionId, 'MULTIPLE_CHOICE');
+      } else if (isChecked) {
+        buttonText = 'Continue';
+        canGoNext = true;
+        buttonAction = _nextStep;
       }
+    } else if (partDescription == 'FILL_IN_BLANK') {
+      isChecked = _checkedQuestions[questionId] == true;
+      final hasAnswer = (_fillInAnswers[questionId]?.trim().isNotEmpty ?? false);
+      
+      if (!isChecked && hasAnswer) {
+        buttonText = 'Kiểm tra';
+        buttonAction = () => _checkAnswer(questionId, 'FILL_IN_BLANK');
+      } else if (isChecked) {
+        // Cho next khi đã kiểm tra (không quan tâm đúng/sai)
+        buttonText = 'Continue';
+        canGoNext = true;
+        buttonAction = _nextStep;
+      }
+    } else if (partDescription == 'MATCHING') {
+      final correctPairs = _matchingCorrectPairs[questionId] ?? {};
+      final wrongPairs = _matchingWrongPairs[questionId] ?? {};
+      final displayOrders = currentQuestion['displayOrders'] as List;
+      final totalPairs = (displayOrders.length / 2).floor();
+      
+      final totalMatched = correctPairs.length + wrongPairs.length;
+      canGoNext = totalMatched >= totalPairs;
+      
+      if (canGoNext) {
+        buttonText = 'Continue';
+        buttonAction = _nextStep;
+      }
+    } else {
+      // Theory or other types
+      canGoNext = true;
+      buttonText = 'Continue';
+      buttonAction = _nextStep;
     }
 
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -2))],
-      ),
       child: Row(
         children: [
           if (_currentStep > 0) ...[
@@ -1157,7 +1281,10 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFE0E0E0)),
               ),
-              child: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 20), onPressed: _previousStep),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                onPressed: _previousStep,
+              ),
             ),
             const SizedBox(width: 12),
           ],
@@ -1165,7 +1292,7 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
             child: SizedBox(
               height: 48,
               child: ElevatedButton(
-                onPressed: canGoNext ? _nextStep : null,
+                onPressed: buttonAction,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF3DD598),
                   foregroundColor: Colors.white,
@@ -1173,7 +1300,10 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   disabledBackgroundColor: Colors.grey[300],
                 ),
-                child: const Text('Continue Learning', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                child: Text(
+                  buttonText,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
           ),
@@ -1183,6 +1313,11 @@ class _VocabularyPracticeScreenState extends State<VocabularyPracticeScreen> {
   }
 
   String _extractContent(String contentPath) {
+    // Nếu không phải URL, trả về trực tiếp
+    if (!contentPath.startsWith('http')) {
+      return contentPath;
+    }
+    
     try {
       final uri = Uri.parse(contentPath);
       final segments = uri.pathSegments;
@@ -1239,11 +1374,16 @@ class _VocabularyTheoryContentWidgetState extends State<VocabularyTheoryContentW
       final displayOrderId = order['display_order_id'];
       
       if (contentType == 'text') {
-        try {
-          final content = await VocabularyPracticeApiService.fetchContent(contentPath);
-          _textContents[displayOrderId] = content;
-        } catch (e) {
-          _textContents[displayOrderId] = 'Error: $e';
+        // Nếu không phải URL, sử dụng trực tiếp
+        if (!contentPath.startsWith('http')) {
+          _textContents[displayOrderId] = contentPath;
+        } else {
+          try {
+            final content = await VocabularyPracticeApiService.fetchContent(contentPath);
+            _textContents[displayOrderId] = content;
+          } catch (e) {
+            _textContents[displayOrderId] = 'Error: $e';
+          }
         }
       }
     }
@@ -1337,7 +1477,7 @@ class _VocabularyTheoryContentWidgetState extends State<VocabularyTheoryContentW
             const SizedBox(height: 24),
             
             if (contentType == 'text') ...[
-              Text(_textContents[displayOrderId] ?? 'Loading...', style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black)),
+              Text(_textContents[displayOrderId] ?? contentPath, style: const TextStyle(fontSize: 14, height: 1.6, color: Colors.black)),
             ] else if (contentType == 'image') ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
