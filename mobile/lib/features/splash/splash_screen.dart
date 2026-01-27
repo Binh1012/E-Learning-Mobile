@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import '../../core/services/auth_service.dart';
+import '../navigation/main_navigation_screen.dart';
+import '../auth/option_screen.dart';
 import '../onboarding/on1_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -10,18 +13,39 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+
   @override
   void initState() {
     super.initState();
-    // Tự động chuyển sang On1Screen sau 5 giây
-    Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const On1Screen()),
-        );
-      }
-    });
+    _checkLogin();
+  }
+
+  Future<void> _checkLogin() async {
+    // Giữ splash 2–3 giây cho đẹp
+    await Future.delayed(const Duration(seconds: 3));
+
+    if (!mounted) return;
+
+    final token = await AuthService.getStoredToken();
+
+    if (token != null && token.isNotEmpty) {
+      // ✅ Đã đăng nhập → vào app
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+        ),
+      );
+    } else {
+      // ❌ Chưa đăng nhập → Option / Onboarding
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const OptionScreen(),
+          // hoặc: const On1Screen()
+        ),
+      );
+    }
   }
 
   @override
@@ -35,7 +59,7 @@ class _SplashScreenState extends State<SplashScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.white, // Primary green color
+              Colors.white,
               Colors.white,
             ],
           ),
@@ -68,7 +92,6 @@ class _SplashScreenState extends State<SplashScreen> {
                 ),
               ),
               const SizedBox(height: 40),
-              // Text "e-Learning"
               const Text(
                 'e-Learning',
                 style: TextStyle(

@@ -6,11 +6,11 @@ class AuthService {
   static const String API_BASE_URL = 'http://api.e-learning.click/api';
   static const String TOKEN_KEY = 'auth_token';
   static const String REFRESH_TOKEN_KEY = 'refresh_token';
-  
+
   // FIXED: Use 8+ character password
   static const String DEFAULT_EMAIL = 'ngokhanh418@gmail.com';
   static const String DEFAULT_PASSWORD = 'Khanh@123';  // Changed from 123456
-  
+
   // Get stored token from SharedPreferences
   static Future<String?> getStoredToken() async {
     try {
@@ -21,7 +21,7 @@ class AuthService {
       return null;
     }
   }
-  
+
   // Save tokens to SharedPreferences
   static Future<void> saveTokens(String accessToken, String refreshToken) async {
     try {
@@ -33,7 +33,7 @@ class AuthService {
       print('Error saving tokens: $e');
     }
   }
-  
+
   // Clear tokens from SharedPreferences
   static Future<void> clearTokens() async {
     try {
@@ -45,7 +45,7 @@ class AuthService {
       print('Error clearing tokens: $e');
     }
   }
-  
+
   // Login and get token
   static Future<String> login({
     String? email,
@@ -53,12 +53,12 @@ class AuthService {
   }) async {
     final loginEmail = email ?? DEFAULT_EMAIL;
     final loginPassword = password ?? DEFAULT_PASSWORD;
-    
+
     try {
       print('🔐 Attempting login...');
       print('Email: $loginEmail');
       print('Password length: ${loginPassword.length} characters');
-      
+
       final response = await http.post(
         Uri.parse('$API_BASE_URL/auth/login'),
         headers: {'Content-Type': 'application/json'},
@@ -67,22 +67,22 @@ class AuthService {
           'password': loginPassword,
         }),
       );
-      
+
       print('Response status: ${response.statusCode}');
-      
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('Response structure: ${data.keys.toList()}');
-        
+
         // Response structure: {"statusCode": 200, "message": "...", "data": {...}}
         if (data['statusCode'] == 200 && data['data'] != null) {
           final tokenData = data['data'];
           final accessToken = tokenData['accessToken'] as String?;
           final refreshToken = tokenData['refreshToken'] as String?;
-          
+
           if (accessToken != null && accessToken.isNotEmpty) {
             print('✅ Access token received');
-            
+
             // Save both tokens
             if (refreshToken != null && refreshToken.isNotEmpty) {
               await saveTokens(accessToken, refreshToken);
@@ -90,7 +90,7 @@ class AuthService {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString(TOKEN_KEY, accessToken);
             }
-            
+
             return accessToken;
           } else {
             throw Exception('No access token in response');
@@ -110,18 +110,18 @@ class AuthService {
       throw Exception('Login error: $e');
     }
   }
-  
+
   // Get valid token (from storage or login)
   static Future<String> getValidToken() async {
     try {
       // Try to get stored token first
       String? token = await getStoredToken();
-      
+
       if (token != null && token.isNotEmpty) {
         print('✅ Using cached token');
         return token;
       }
-      
+
       // If no token, login to get new one
       print('⚠️ No cached token, logging in...');
       token = await login();
@@ -131,9 +131,46 @@ class AuthService {
       throw Exception('Failed to get valid token: $e');
     }
   }
-  
+
   // Logout
   static Future<void> logout() async {
     await clearTokens();
   }
+
+  //register
+  static Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$API_BASE_URL/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'password': password,
+      }),
+    );
+
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['message'] ?? 'Register failed');
+    }
+  }
+  //forgot pass
+  static Future<void> forgotPassword(String email) async {
+    final response = await http.post(
+      Uri.parse('$API_BASE_URL/auth/forgot-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['message'] ?? 'Request failed');
+    }
+  }
+
+
 }
