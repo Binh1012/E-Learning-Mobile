@@ -5,14 +5,14 @@ import '../../core/services/auth_service.dart';
 class VocabularyPracticeApiService {
   static const String API_BASE_URL = 'http://api.e-learning.click/api';
   
-  // Get parts list for a vocabulary lesson
-  static Future<Map<String, dynamic>> getLessonParts({
+  // Get lesson details with parts - API MỚI
+  static Future<Map<String, dynamic>> getLessonWithParts({
     required int lessonId,
   }) async {
     final token = await AuthService.getValidToken();
     
     final response = await http.get(
-      Uri.parse('$API_BASE_URL/grammar/lessons/$lessonId/parts'),
+      Uri.parse('$API_BASE_URL/vocabs/lessons/$lessonId'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -20,46 +20,26 @@ class VocabularyPracticeApiService {
     );
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to load parts: ${response.statusCode}');
+      throw Exception('Failed to load lesson: ${response.statusCode}');
     }
 
-    final partsData = json.decode(response.body);
-    if (partsData['statusCode'] != 200 || partsData['data'] == null) {
-      throw Exception('Invalid parts response');
+    final lessonData = json.decode(response.body);
+    if (lessonData['statusCode'] != 200 || lessonData['data'] == null) {
+      throw Exception('Invalid lesson response');
     }
 
-    return partsData;
-  }
-
-  // Get part details (includes questions and correct_answer_path)
-  static Future<Map<String, dynamic>> getPartDetails({
-    required int partId,
-  }) async {
-    final token = await AuthService.getValidToken();
-    
-    final response = await http.get(
-      Uri.parse('$API_BASE_URL/grammar/parts/$partId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load part details: ${response.statusCode}');
-    }
-
-    final partDetailData = json.decode(response.body);
-    if (partDetailData['statusCode'] != 200 || partDetailData['data'] == null) {
-      throw Exception('Invalid part detail response');
-    }
-
-    return partDetailData;
+    return lessonData;
   }
 
   // Load correct answers from URL
   static Future<String> fetchCorrectAnswers(String correctAnswerPath) async {
-    final response = await http.get(Uri.parse(correctAnswerPath));
+    // Thêm base URL nếu path chưa có
+    String fullUrl = correctAnswerPath;
+    if (!correctAnswerPath.startsWith('http')) {
+      fullUrl = 'https://e-learn-backend.s3.ap-southeast-2.amazonaws.com/$correctAnswerPath';
+    }
+    
+    final response = await http.get(Uri.parse(fullUrl));
     
     if (response.statusCode != 200) {
       throw Exception('Failed to load correct answers: ${response.statusCode}');
@@ -104,5 +84,36 @@ class VocabularyPracticeApiService {
       print('Error fetching content: $e');
       return 'Error: $e';
     }
+  }
+
+  // Submit lesson answers
+  static Future<Map<String, dynamic>> submitLesson({
+    required int lessonId,
+    required List<Map<String, dynamic>> answers,
+  }) async {
+    final token = await AuthService.getValidToken();
+    
+    final response = await http.post(
+      Uri.parse('$API_BASE_URL/vocabs/lessons/submit'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: json.encode({
+        'lesson_id': lessonId,
+        'answers': answers,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to submit lesson: ${response.statusCode}');
+    }
+
+    final resultData = json.decode(response.body);
+    if (resultData['statusCode'] != 200 || resultData['data'] == null) {
+      throw Exception('Invalid submit response');
+    }
+
+    return resultData;
   }
 }

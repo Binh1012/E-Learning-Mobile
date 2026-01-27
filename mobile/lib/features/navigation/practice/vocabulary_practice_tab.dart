@@ -33,7 +33,7 @@ class _VocabularyPracticeTabState extends State<VocabularyPracticeTab> {
     try {
       final token = await AuthService.getValidToken();
       
-      // Changed from grammar/lessons to vocabulary/lessons
+      // Using new vocabulary API endpoint
       final response = await http.get(
         Uri.parse('$API_BASE_URL/vocabs/lessons'),
         headers: {
@@ -47,21 +47,22 @@ class _VocabularyPracticeTabState extends State<VocabularyPracticeTab> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
-        if (data['statusCode'] == 200 && data['data'] != null && data['data']['lessons'] != null) {
-          final lessons = data['data']['lessons'] as List;
+        // API mới: data['data'] là array trực tiếp, không có nested 'lessons'
+        if (data['statusCode'] == 200 && data['data'] != null) {
+          final lessons = data['data'] as List;
           
           setState(() {
             _vocabularyLessons = lessons.map((lesson) {
               final title = lesson['title']?.toString() ?? 'Unknown Lesson';
               final description = lesson['description']?.toString() ?? '';
-              final parts = lesson['parts'] as List? ?? [];
+              // API mới không có 'parts', set default value
               
               return {
                 'lesson_id': lesson['lesson_id'],
                 'title': title,
                 'description': description,
                 'progress': 0.0,
-                'parts': parts.length,
+                'parts': 3, // Default value vì API mới không có parts
                 'completed': 0,
               };
             }).toList();
@@ -78,7 +79,7 @@ class _VocabularyPracticeTabState extends State<VocabularyPracticeTab> {
         final newToken = await AuthService.login();
         
         final retryResponse = await http.get(
-          Uri.parse('$API_BASE_URL/vocabulary/lessons?limit=20'),
+          Uri.parse('$API_BASE_URL/vocabs/lessons'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $newToken',
@@ -88,21 +89,21 @@ class _VocabularyPracticeTabState extends State<VocabularyPracticeTab> {
         if (retryResponse.statusCode == 200) {
           final data = json.decode(retryResponse.body);
           
-          if (data['statusCode'] == 200 && data['data'] != null && data['data']['lessons'] != null) {
-            final lessons = data['data']['lessons'] as List;
+          // API mới: data['data'] là array trực tiếp
+          if (data['statusCode'] == 200 && data['data'] != null) {
+            final lessons = data['data'] as List;
             
             setState(() {
               _vocabularyLessons = lessons.map((lesson) {
                 final title = lesson['title']?.toString() ?? 'Unknown Lesson';
                 final description = lesson['description']?.toString() ?? '';
-                final parts = lesson['parts'] as List? ?? [];
                 
                 return {
                   'lesson_id': lesson['lesson_id'],
                   'title': title,
                   'description': description,
                   'progress': 0.0,
-                  'parts': parts.length,
+                  'parts': 3, // Default value
                   'completed': 0,
                 };
               }).toList();
