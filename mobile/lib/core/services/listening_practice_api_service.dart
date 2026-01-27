@@ -61,7 +61,7 @@ class ListeningPracticeApiService {
     }
   }
 
-  // Get part details (includes questions and correct_answer_path)
+  // Get part details (includes questions)
   static Future<Map<String, dynamic>> getPartDetails({
     required int partId,
   }) async {
@@ -109,128 +109,6 @@ class ListeningPracticeApiService {
     } catch (e) {
       print('❌ Error loading part details: $e');
       throw Exception('Error loading part details: $e');
-    }
-  }
-
-  // Load correct answers from URL
-  static Future<String> fetchCorrectAnswers(String correctAnswerPath) async {
-    try {
-      print('📥 Fetching correct answers from: $correctAnswerPath');
-      final response = await http.get(Uri.parse(correctAnswerPath));
-      
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load correct answers: ${response.statusCode}');
-      }
-
-      final answers = utf8.decode(response.bodyBytes).trim();
-      print('✅ Loaded correct answers: ${answers.length} characters');
-      return answers;
-    } catch (e) {
-      print('❌ Error fetching correct answers: $e');
-      throw Exception('Error fetching correct answers: $e');
-    }
-  }
-
-  // Parse MULTIPLE_CHOICE answers (format: D,C,B,A,D,A)
-  static List<String> parseMultipleChoiceAnswers(String content) {
-    return content.split(',').map((e) => e.trim()).toList();
-  }
-
-  // Parse MATCHING answers (format: digital-kỹ thuật số,network-mạng lưới)
-  static Map<String, String> parseMatchingAnswers(String content) {
-    final pairs = content.split(',');
-    final matchMap = <String, String>{};
-    for (var pair in pairs) {
-      final parts = pair.split('-');
-      if (parts.length == 2) {
-        matchMap[parts[0].trim()] = parts[1].trim();
-      }
-    }
-    return matchMap;
-  }
-
-  // Parse FILL_IN_BLANK answers (format: hardware,profile)
-  static List<String> parseFillInBlankAnswers(String content) {
-    return content.split(',').map((e) => e.trim().toLowerCase()).toList();
-  }
-
-  // Fetch content from URL (for displayOrders text content)
-  static Future<String> fetchContent(String contentPath) async {
-    try {
-      print('📄 Fetching content from: $contentPath');
-      final response = await http.get(Uri.parse(contentPath));
-      if (response.statusCode == 200) {
-        final content = utf8.decode(response.bodyBytes);
-        print('✅ Loaded content: ${content.length} characters');
-        return content;
-      } else {
-        print('⚠️ Failed to load content: ${response.statusCode}');
-        return 'Failed to load content';
-      }
-    } catch (e) {
-      print('❌ Error fetching content: $e');
-      return 'Error: $e';
-    }
-  }
-
-  // Submit user answer (client-side submission)
-  // Returns whether the answer was processed successfully
-  static Future<Map<String, dynamic>> submitAnswer({
-    required int partId,
-    required int questionId,
-    required String selectedAnswer,
-    required int quality,
-  }) async {
-    try {
-      final token = await _getValidTokenWithRetry();
-      
-      final requestBody = {
-        'partId': partId,
-        'questionId': questionId,
-        'selectedAnswer': selectedAnswer,
-        'quality': quality,
-      };
-
-      print('📤 Submitting grammar answer: $requestBody');
-      
-      var response = await http.post(
-        Uri.parse('$API_BASE_URL/grammar/answer'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode(requestBody),
-      );
-
-      print('📥 Answer response: ${response.statusCode}');
-
-      if (response.statusCode == 401) {
-        print('⚠️ Token expired, retrying...');
-        await AuthService.clearTokens();
-        final newToken = await AuthService.login();
-        
-        response = await http.post(
-          Uri.parse('$API_BASE_URL/grammar/answer'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $newToken',
-          },
-          body: jsonEncode(requestBody),
-        );
-        
-        print('🔄 Retry response: ${response.statusCode}');
-      }
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final result = jsonDecode(response.body);
-        print('✅ Answer submitted successfully');
-        return result;
-      } else {
-        throw Exception('Failed to submit answer: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('❌ Error submitting answer: $e');
-      throw Exception('Error submitting answer: $e');
     }
   }
 
@@ -287,9 +165,9 @@ class ListeningPracticeApiService {
           final submissionData = result['data']['data'];
           print('✅ Part submission successful');
           print('🎯 Score: ${submissionData['score']}');
-          print('✍️ Your answers: ${submissionData['answers']}');
+          print('✏️ Your answers: ${submissionData['answers']}');
           print('✓ Correct answers: ${submissionData['correctAnswers']}');
-          print('📝 Submission ID: ${submissionData['userSubmissionId']}');
+          print('🔖 Submission ID: ${submissionData['userSubmissionId']}');
         }
         
         return result;
@@ -299,6 +177,25 @@ class ListeningPracticeApiService {
     } catch (e) {
       print('❌ Error submitting part answers: $e');
       throw Exception('Error submitting part answers: $e');
+    }
+  }
+
+  // Load correct answers from URL
+  static Future<String> fetchCorrectAnswers(String correctAnswerPath) async {
+    try {
+      print('📥 Fetching correct answers from: $correctAnswerPath');
+      final response = await http.get(Uri.parse(correctAnswerPath));
+      
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load correct answers: ${response.statusCode}');
+      }
+
+      final answers = utf8.decode(response.bodyBytes).trim();
+      print('✅ Loaded correct answers: ${answers.length} characters');
+      return answers;
+    } catch (e) {
+      print('❌ Error fetching correct answers: $e');
+      throw Exception('Error fetching correct answers: $e');
     }
   }
 }
