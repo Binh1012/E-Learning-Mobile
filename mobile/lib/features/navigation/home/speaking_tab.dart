@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/services/auth_service.dart';
+import '../../speaking/speaking_detail_screen.dart';
+
 
 class SpeakingTab extends StatefulWidget {
   const SpeakingTab({Key? key}) : super(key: key);
@@ -202,7 +204,15 @@ class _SpeakingTabState extends State<SpeakingTab> {
                 ),
                 TextButton(
                   onPressed: () {
-                    // TODO: điều hướng sang màn materials
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SpeakingDetailScreen(
+                          activityId: topic['id'],
+                          title: topic['title'],
+                        ),
+                      ),
+                    );
                   },
                   child: const Text(
                     'Continue',

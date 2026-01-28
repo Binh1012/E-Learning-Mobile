@@ -5,9 +5,9 @@ import 'auth_service.dart';
 
 class SpeakingApiService {
 
-  // ===== LẤY DANH SÁCH TOPIC =====
+  // ===== TOPICS =====
   static Future<List<dynamic>> getLearningTopics() async {
-    final token = await AuthService.getStoredToken();
+    final token = await AuthService.getValidToken();
 
     final response = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/speaking/learning/topics'),
@@ -17,19 +17,19 @@ class SpeakingApiService {
       },
     );
 
-    if (response.statusCode == 200) {
-      final jsonData = json.decode(response.body);
-      return jsonData['data'];
-    } else {
+    if (response.statusCode != 200) {
       throw Exception('Failed to load speaking topics');
     }
+
+    final jsonData = json.decode(response.body);
+    return jsonData['data'] ?? [];
   }
 
-  // ===== LẤY MATERIAL THEO ACTIVITY =====
+  // ===== MATERIALS =====
   static Future<Map<String, dynamic>> getLearningMaterials(int activityId) async {
-    final token = await AuthService.getStoredToken();
+    final token = await AuthService.getValidToken();
 
-    final response = await http.get(
+    http.Response response = await http.get(
       Uri.parse('${ApiConfig.baseUrl}/speaking/learning/materials/$activityId'),
       headers: {
         'accept': '*/*',
@@ -37,11 +37,27 @@ class SpeakingApiService {
       },
     );
 
-    if (response.statusCode == 200) {
-      final jsonData = json.decode(response.body);
-      return jsonData['data'];
-    } else {
-      throw Exception('Failed to load speaking materials');
+    // 🔥 nếu token hết hạn
+    if (response.statusCode == 401) {
+      await AuthService.clearTokens();
+      final newToken = await AuthService.login();
+
+      response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/speaking/learning/materials/$activityId'),
+        headers: {
+          'accept': '*/*',
+          'Authorization': 'Bearer $newToken',
+        },
+      );
     }
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load speaking materials (${response.statusCode})',
+      );
+    }
+
+    final jsonData = json.decode(response.body);
+    return jsonData['data'];
   }
 }
