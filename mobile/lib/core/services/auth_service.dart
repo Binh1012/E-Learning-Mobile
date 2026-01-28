@@ -6,11 +6,29 @@ class AuthService {
   static const String API_BASE_URL = 'http://api.e-learning.click/api';
   static const String TOKEN_KEY = 'auth_token';
   static const String REFRESH_TOKEN_KEY = 'refresh_token';
+  static const String REMEMBER_ME_KEY = 'remember_me';
 
   // FIXED: Use 8+ character password
   static const String DEFAULT_EMAIL = 'ngokhanh418@gmail.com';
   static const String DEFAULT_PASSWORD = 'Khanh@123';  // Changed from 123456
 
+  // check remember me
+  static Future<void> saveLoginState({
+    required String accessToken,
+    required String refreshToken,
+    required bool rememberMe,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(TOKEN_KEY, accessToken);
+    await prefs.setString(REFRESH_TOKEN_KEY, refreshToken);
+    await prefs.setBool(REMEMBER_ME_KEY, rememberMe);
+  }
+
+// Check remember me
+  static Future<bool> isRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(REMEMBER_ME_KEY) ?? false;
+  }
   // Get stored token from SharedPreferences
   static Future<String?> getStoredToken() async {
     try {
@@ -134,8 +152,12 @@ class AuthService {
 
   // Logout
   static Future<void> logout() async {
-    await clearTokens();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(TOKEN_KEY);
+    await prefs.remove(REFRESH_TOKEN_KEY);
+    await prefs.remove(REMEMBER_ME_KEY);
   }
+
 
   //register
   static Future<void> register({

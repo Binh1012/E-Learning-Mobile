@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../navigation/main_navigation_screen.dart';
 import '../../core/services/auth_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,11 +14,65 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
 
   bool rememberMe = false;
   bool obscurePassword = true;
+  bool isLoading = false;
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleLogin() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter email and password')),
+      );
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final token = await AuthService.login(
+        email: email,
+        password: password,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+
+      if (rememberMe) {
+        await prefs.setBool('remember_me', true);
+        await prefs.setString(AuthService.TOKEN_KEY, token);
+      } else {
+        await prefs.setBool('remember_me', false);
+        await prefs.remove(AuthService.TOKEN_KEY);
+      }
+
+      if (!mounted) return;
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const MainNavigationScreen(),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,16 +84,12 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-
-                // ===== Title =====
                 const SizedBox(height: 40),
+
                 const Center(
                   child: Text(
                     "Login",
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -58,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
                     hintText: "Enter your Email",
                     filled: true,
@@ -112,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           value: rememberMe,
                           onChanged: (value) {
                             setState(() {
-                              rememberMe = value!;
+                              rememberMe = value ?? false;
                             });
                           },
                         ),
@@ -146,77 +197,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    onPressed: () async {
-                      try {
-                        final token = await AuthService.login(
-                          email: emailController.text.trim(),
-                          password: passwordController.text.trim(),
-                        );
-
-                        final prefs = await SharedPreferences.getInstance();
-
-                        if (rememberMe) {
-                          await prefs.setBool('remember_me', true);
-                          // token đã được AuthService lưu
-                        } else {
-
-                          await AuthService.clearTokens();
-                          await prefs.setBool('remember_me', false);
-                        }
-
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const MainNavigationScreen(),
-                          ),
-                        );
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
-                        );
-                      }
-                    },
-
-
-
-                    child: const Text(
+                    onPressed: isLoading ? null : _handleLogin,
+                    child: isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
                       "Login",
                       style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                // ===== OR =====
-                Row(
-                  children: const [
-                    Expanded(child: Divider()),
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 10),
-                      child: Text("OR"),
-                    ),
-                    Expanded(child: Divider()),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-
-                // ===== Google Login =====
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: Image.network(
-                      "https://upload.wikimedia.org/wikipedia/commons/0/09/IOS_Google_icon.png",
-                      height: 20,
-                    ),
-                    label: const Text("Login with Google"),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
                     ),
                   ),
                 ),

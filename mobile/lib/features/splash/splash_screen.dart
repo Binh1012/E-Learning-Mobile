@@ -21,15 +21,15 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkLogin() async {
-    // Giữ splash 2–3 giây cho đẹp
     await Future.delayed(const Duration(seconds: 3));
 
     if (!mounted) return;
 
     final token = await AuthService.getStoredToken();
+    final rememberMe = await AuthService.isRememberMe();
 
-    if (token != null && token.isNotEmpty) {
-      // ✅ Đã đăng nhập → vào app
+    if (token != null && token.isNotEmpty && rememberMe) {
+      // ✅ Auto login
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -37,16 +37,16 @@ class _SplashScreenState extends State<SplashScreen> {
         ),
       );
     } else {
-      // ❌ Chưa đăng nhập → Option / Onboarding
+      // ❌ Không auto login
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => const OptionScreen(),
-          // hoặc: const On1Screen()
+          builder: (_) => const On1Screen(),
         ),
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
