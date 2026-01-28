@@ -206,24 +206,31 @@ class _ProgressTabState extends State<ProgressTab> {
               child: Row(
                 children: [
                   // Logo
-                  Container(
+                  Image.asset(
+                    'assets/images/Logo.png',
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3DD598),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.assessment_outlined,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+                    errorBuilder: (context, error, stackTrace) {
+                      return Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3DD598),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.menu_book,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 12),
                   // Welcome Title
                   const Expanded(
                     child: Text(
-                      'Practice Tests',
+                      'Review Test',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.w700,

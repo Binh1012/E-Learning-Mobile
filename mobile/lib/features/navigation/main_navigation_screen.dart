@@ -3,6 +3,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/practice_tab.dart';
 import 'tabs/progress_tab.dart';
 import 'tabs/settings_tab.dart';
+import '../chatbox/chat_box_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({Key? key}) : super(key: key);
@@ -24,7 +25,52 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: Stack(
+        children: [
+          // Main content (tabs)
+          _screens[_currentIndex],
+          
+          // Floating Chat Button (visible on all tabs)
+          Positioned(
+            bottom: 80, // Closer to bottom nav bar
+            right: 16,
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ChatBoxScreen(),
+                  ),
+                );
+              },
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF3DD598), Color(0xFF2AB57D)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF3DD598).withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.chat_bubble_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       bottomNavigationBar: _buildBottomNavBar(),
     );
   }
