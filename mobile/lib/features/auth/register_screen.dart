@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -14,6 +13,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   final nameController = TextEditingController();
   final emailController = TextEditingController();
+  final phoneController = TextEditingController();
   final passwordController = TextEditingController();
 
   bool obscurePassword = true;
@@ -77,12 +77,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextFormField(
                     controller: emailController,
                     decoration: _inputDecoration("Enter your Email"),
+                    keyboardType: TextInputType.emailAddress,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return "Vui lòng nhập email";
                       }
                       if (!value.contains("@")) {
                         return "Email không hợp lệ";
+                      }
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ===== Phone =====
+                  const Text("Phone Number"),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: phoneController,
+                    decoration: _inputDecoration("Enter your phone number"),
+                    keyboardType: TextInputType.phone,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return "Vui lòng nhập số điện thoại";
+                      }
+                      if (value.length < 9) {
+                        return "Số điện thoại không hợp lệ";
                       }
                       return null;
                     },
@@ -135,29 +156,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           });
                         },
                       ),
-                      Expanded(
-                        child: RichText(
-                          text: const TextSpan(
-                            style: TextStyle(color: Colors.black),
-                            children: [
-                              TextSpan(text: "I agree with "),
-                              TextSpan(
-                                text: "Terms of Use",
-                                style: TextStyle(
-                                  decoration: TextDecoration.underline,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              TextSpan(text: " and "),
-                              TextSpan(
-                                text: "Privacy Policy",
-                                style: TextStyle(
-                                  decoration: TextDecoration.underline,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                      const Expanded(
+                        child: Text(
+                          "I agree with Terms of Use and Privacy Policy",
                         ),
                       ),
                     ],
@@ -192,13 +193,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               name: nameController.text.trim(),
                               email: emailController.text.trim(),
                               password: passwordController.text.trim(),
+                              phone: phoneController.text.trim(),
                             );
 
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Đăng ký thành công")),
+                              const SnackBar(
+                                content: Text("Đăng ký thành công"),
+                              ),
                             );
 
-                            Navigator.pop(context);
+                            Navigator.pop(context); // về Login
                           } catch (e) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(content: Text(e.toString())),
@@ -206,43 +210,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           }
                         }
                       },
-
                       child: const Text("Sign Up"),
-                    ),
-                  ),
-
-                  const SizedBox(height: 30),
-
-                  // ===== OR =====
-                  Row(
-                    children: const [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 10),
-                        child: Text("OR"),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // ===== Google =====
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: OutlinedButton.icon(
-                      onPressed: () {},
-                      icon: Image.network(
-                        "https://upload.wikimedia.org/wikipedia/commons/0/09/IOS_Google_icon.png",
-                        height: 20,
-                      ),
-                      label: const Text("Sign up with Google"),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
                     ),
                   ),
 
@@ -276,8 +244,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String hint,
-      {Widget? suffixIcon}) {
+  InputDecoration _inputDecoration(String hint, {Widget? suffixIcon}) {
     return InputDecoration(
       hintText: hint,
       filled: true,

@@ -158,28 +158,36 @@ class AuthService {
     await prefs.remove(REMEMBER_ME_KEY);
   }
 
-
   //register
   static Future<void> register({
     required String name,
     required String email,
     required String password,
+    required String phone,
   }) async {
+    final url = Uri.parse('$API_BASE_URL/users');
+
     final response = await http.post(
-      Uri.parse('$API_BASE_URL/auth/register'),
-      headers: {'Content-Type': 'application/json'},
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'accept': '*/*',
+      },
       body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
+        "username": name,
+        "email": email,
+        "password": password,
+        "number_phone": phone,
       }),
     );
 
-    if (response.statusCode != 201 && response.statusCode != 200) {
+    if (response.statusCode != 201) {
       final data = jsonDecode(response.body);
-      throw Exception(data['message'] ?? 'Register failed');
+      throw Exception(data['message'] ?? 'Đăng ký thất bại');
     }
   }
+
+
   //forgot pass
   static Future<void> forgotPassword(String email) async {
     final response = await http.post(
