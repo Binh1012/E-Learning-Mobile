@@ -15,7 +15,7 @@ class ReviewTestApiService {
     required int lessonId,
   }) async {
     try {
-      print('📚 Loading full lesson data for exam $lessonId...');
+      print('ðŸ“š Loading full lesson data for exam $lessonId...');
       var token = await _getValidTokenWithRetry();
       
       var response = await http.get(
@@ -26,10 +26,10 @@ class ReviewTestApiService {
         },
       );
 
-      print('📨 Lesson response: ${response.statusCode}');
+      print('ðŸ“¨ Lesson response: ${response.statusCode}');
 
       if (response.statusCode == 401) {
-        print('⚠️ Token expired, refreshing...');
+        print('âš ï¸ Token expired, refreshing...');
         await AuthService.clearTokens();
         token = await AuthService.login();
         
@@ -41,7 +41,7 @@ class ReviewTestApiService {
           },
         );
         
-        print('🔄 Retry response: ${response.statusCode}');
+        print('ðŸ”„ Retry response: ${response.statusCode}');
       }
 
       if (response.statusCode != 200) {
@@ -53,33 +53,40 @@ class ReviewTestApiService {
         throw Exception('Invalid lesson response');
       }
 
-      print('✅ Loaded lesson data successfully');
+      print('âœ… Loaded lesson data successfully');
       return lessonData;
     } catch (e) {
-      print('❌ Error loading lesson data: $e');
+      print('âŒ Error loading lesson data: $e');
       throw Exception('Error loading lesson data: $e');
     }
   }
 
-  // Submit all answers for a part and get scoring feedback
-  // Format: answers = "ABCDA" (concatenated answers for all questions in part)
-  // Returns score and detailed feedback (correct answers, submission ID, etc.)
-  static Future<Map<String, dynamic>> submitPartAnswers({
+  // Submit entire exam with all answers
+  // Format: partAnswers = {part_id: "ABCDABCD", ...}
+  // Returns complete test results with scoring and level upgrade info
+  static Future<Map<String, dynamic>> submitExam({
     required int lessonId,
-    required int partId,
-    required String answers,
+    required Map<int, String> partAnswers, // Map of part_id -> answer string
   }) async {
     try {
       final token = await _getValidTokenWithRetry();
       
+      // Convert Map to List format for API
+      final answersList = partAnswers.entries.map((entry) => {
+        'part_id': entry.key,
+        'answer': entry.value,
+      }).toList();
+      
       final requestBody = {
-        'answers': answers,
+        'lesson_id': lessonId,
+        'answers': answersList,
       };
 
-      print('📤 Submitting part answers: lessonId=$lessonId, partId=$partId, answers=$answers');
+      print('ðŸŽ¯ Submitting exam: lessonId=$lessonId');
+      print('ðŸ“ Answers: ${jsonEncode(answersList)}');
       
       var response = await http.post(
-        Uri.parse('$API_BASE_URL/exams/lessons/$lessonId/parts/$partId/submissions'),
+        Uri.parse('$API_BASE_URL/exams/submit'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
@@ -87,15 +94,15 @@ class ReviewTestApiService {
         body: jsonEncode(requestBody),
       );
 
-      print('📥 Part submission response: ${response.statusCode}');
+      print('ðŸ“¥ Exam submission response: ${response.statusCode}');
 
       if (response.statusCode == 401) {
-        print('⚠️ Token expired, retrying...');
+        print('âš ï¸ Token expired, retrying...');
         await AuthService.clearTokens();
         final newToken = await AuthService.login();
         
         response = await http.post(
-          Uri.parse('$API_BASE_URL/exams/lessons/$lessonId/parts/$partId/submissions'),
+          Uri.parse('$API_BASE_URL/exams/submit'),
           headers: {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer $newToken',
@@ -103,48 +110,33 @@ class ReviewTestApiService {
           body: jsonEncode(requestBody),
         );
         
-        print('🔄 Retry response: ${response.statusCode}');
+        print('ðŸ”„ Retry response: ${response.statusCode}');
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final result = jsonDecode(response.body);
         
-        // Log detailed feedback
-        if (result['data'] != null && result['data']['data'] != null) {
-          final submissionData = result['data']['data'];
-          print('✅ Part submission successful');
-          print('🎯 Score: ${submissionData['score']}');
-          print('✏️ Your answers: ${submissionData['answers']}');
-          print('✓ Correct answers: ${submissionData['correctAnswers']}');
-          print('🔖 Submission ID: ${submissionData['userSubmissionId']}');
+        // Log detailed results
+        if (result['data'] != null) {
+          final examData = result['data'];
+          print('âœ… Exam submission successful');
+          print('ðŸŽ¯ Total Score: ${examData['total_score']}');
+          print('ðŸ“Š Status: ${examData['status']}');
+          if (examData['level_upgraded'] == true) {
+            print('ðŸŽ‰ Level upgraded to: ${examData['new_level']}');
+          } else {
+            print('ðŸ“ˆ Keep practicing to level up!');
+          }
         }
         
         return result;
       } else {
-        throw Exception('Failed to submit part answers: ${response.statusCode}');
+        print('âŒ Response body: ${response.body}');
+        throw Exception('Failed to submit exam: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Error submitting part answers: $e');
-      throw Exception('Error submitting part answers: $e');
-    }
-  }
-
-  // Load correct answers from URL
-  static Future<String> fetchCorrectAnswers(String correctAnswerPath) async {
-    try {
-      print('📥 Fetching correct answers from: $correctAnswerPath');
-      final response = await http.get(Uri.parse(correctAnswerPath));
-      
-      if (response.statusCode != 200) {
-        throw Exception('Failed to load correct answers: ${response.statusCode}');
-      }
-
-      final answers = utf8.decode(response.bodyBytes).trim();
-      print('✅ Loaded correct answers: ${answers.length} characters');
-      return answers;
-    } catch (e) {
-      print('❌ Error fetching correct answers: $e');
-      throw Exception('Error fetching correct answers: $e');
+      print('âŒ Error submitting exam: $e');
+      throw Exception('Error submitting exam: $e');
     }
   }
 }
