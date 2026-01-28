@@ -197,10 +197,50 @@ class AuthService {
     );
 
     if (response.statusCode != 200) {
-      final data = jsonDecode(response.body);
-      throw Exception(data['message'] ?? 'Request failed');
+      throw Exception('Gửi OTP thất bại');
     }
   }
 
+  static Future<void> resetPassword({
+    required String resetToken,
+    required String newPassword,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$API_BASE_URL/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'resetToken': resetToken,
+        'newPassword': newPassword,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final data = jsonDecode(response.body);
+      throw Exception(data['message'][0]);
+    }
+  }
+
+
+  static Future<String> verifyOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$API_BASE_URL/auth/verify-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'otp': otp,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200) {
+      return data['data']['resetToken'];
+    } else {
+      throw Exception(data['message'] ?? 'OTP không hợp lệ');
+    }
+  }
 
 }

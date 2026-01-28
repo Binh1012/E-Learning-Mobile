@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+enum ForgotStep { email, otp, resetPassword }
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -11,7 +12,17 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
+
   final emailController = TextEditingController();
+  final otpController = TextEditingController();
+  final newPasswordController = TextEditingController();
+
+  ForgotStep currentStep = ForgotStep.email;
+
+  String? resetToken; // ✅ QUAN TRỌNG
+
+  bool isLoading = false;
+  bool obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -28,47 +39,103 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
                   const SizedBox(height: 40),
 
-                  // ===== Title =====
-                  const Center(
+                  // ===== TITLE =====
+                  Center(
                     child: Text(
-                      "Forgot Password",
-                      style: TextStyle(
+                      _getTitle(),
+                      style: const TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                   const SizedBox(height: 10),
-                  const Center(
+                  Center(
                     child: Text(
-                      "Enter your email and we’ll send you a reset link.",
+                      _getSubtitle(),
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.grey),
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   ),
 
                   const SizedBox(height: 40),
 
-                  // ===== Email =====
-                  const Text("Email"),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: emailController,
-                    decoration: _inputDecoration("Enter your Email"),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return "Vui lòng nhập email";
-                      }
-                      if (!value.contains("@")) {
-                        return "Email không hợp lệ";
-                      }
-                      return null;
-                    },
-                  ),
+                  // ===== STEP 1: EMAIL =====
+                  if (currentStep == ForgotStep.email) ...[
+                    const Text("Email"),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: _inputDecoration("Enter your email"),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return "Vui lòng nhập email";
+                        }
+                        if (!value.contains("@")) {
+                          return "Email không hợp lệ";
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+
+                  // ===== STEP 2: OTP =====
+                  if (currentStep == ForgotStep.otp) ...[
+                    const Text("OTP Code"),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: otpController,
+                      keyboardType: TextInputType.number,
+                      decoration: _inputDecoration("Enter OTP"),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return "Vui lòng nhập OTP";
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+
+                  // ===== STEP 3: RESET PASSWORD =====
+                  if (currentStep == ForgotStep.resetPassword) ...[
+                    const Text("New Password"),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: newPasswordController,
+                      obscureText: obscurePassword,
+                      decoration: _inputDecoration(
+                        "Enter new password",
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              obscurePassword = !obscurePassword;
+                            });
+                          },
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return "Vui lòng nhập mật khẩu";
+                        }
+                        if (!RegExp(
+                          r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$',
+                        ).hasMatch(value)) {
+                          return "Mật khẩu ≥8 ký tự, gồm hoa, thường, số & ký tự đặc biệt";
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
 
                   const SizedBox(height: 30),
 
-                  // ===== Send Button =====
+                  // ===== MAIN BUTTON =====
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -79,36 +146,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      onPressed: () async {
-                        if (_formKey.currentState!.validate()) {
-                          try {
-                            await AuthService.forgotPassword(
-                              emailController.text.trim(),
-                            );
-
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Email reset đã được gửi")),
-                            );
-
-                            Navigator.pop(context);
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString())),
-                            );
-                          }
-                        }
-                      },
-
-                      child: const Text(
-                        "Send Reset Link",
-                        style: TextStyle(fontSize: 16),
+                      onPressed: isLoading ? null : _handleSubmit,
+                      child: isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                        _getButtonText(),
+                        style: const TextStyle(fontSize: 16),
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 30),
 
-                  // ===== Back to Login =====
+                  // ===== BACK =====
                   Center(
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
@@ -130,11 +180,111 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     );
   }
 
-  InputDecoration _inputDecoration(String hint) {
+  // ================= LOGIC =================
+
+  Future<void> _handleSubmit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => isLoading = true);
+
+    try {
+      /// STEP 1: SEND OTP
+      if (currentStep == ForgotStep.email) {
+        await AuthService.forgotPassword(emailController.text.trim());
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("OTP đã được gửi tới email")),
+        );
+
+        setState(() => currentStep = ForgotStep.otp);
+      }
+
+      /// STEP 2: VERIFY OTP
+      else if (currentStep == ForgotStep.otp) {
+        resetToken = await AuthService.verifyOtp(
+          email: emailController.text.trim(),
+          otp: otpController.text.trim(),
+        );
+
+        otpController.clear();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("OTP hợp lệ")),
+        );
+
+        setState(() => currentStep = ForgotStep.resetPassword);
+      }
+
+      /// STEP 3: RESET PASSWORD
+      else if (currentStep == ForgotStep.resetPassword) {
+        if (resetToken == null) {
+          throw Exception("Thiếu reset token");
+        }
+
+        await AuthService.resetPassword(
+          resetToken: resetToken!,
+          newPassword: newPasswordController.text.trim(),
+        );
+
+        newPasswordController.clear();
+        resetToken = null;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Đổi mật khẩu thành công")),
+        );
+
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    } finally {
+      setState(() => isLoading = false);
+    }
+  }
+
+  // ================= UI HELPERS =================
+
+  String _getTitle() {
+    switch (currentStep) {
+      case ForgotStep.email:
+        return "Forgot Password";
+      case ForgotStep.otp:
+        return "Verify OTP";
+      case ForgotStep.resetPassword:
+        return "Reset Password";
+    }
+  }
+
+  String _getSubtitle() {
+    switch (currentStep) {
+      case ForgotStep.email:
+        return "Enter your email to receive OTP";
+      case ForgotStep.otp:
+        return "Enter the OTP sent to your email";
+      case ForgotStep.resetPassword:
+        return "Create a new password";
+    }
+  }
+
+  String _getButtonText() {
+    switch (currentStep) {
+      case ForgotStep.email:
+        return "Send OTP";
+      case ForgotStep.otp:
+        return "Verify OTP";
+      case ForgotStep.resetPassword:
+        return "Reset Password";
+    }
+  }
+
+  InputDecoration _inputDecoration(String hint, {Widget? suffixIcon}) {
     return InputDecoration(
       hintText: hint,
       filled: true,
       fillColor: Colors.grey.shade100,
+      suffixIcon: suffixIcon,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
