@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/services/speaking_api_service.dart';
+import '../../core/services/speaking_progress_service.dart';
 
 class SpeakingCard {
   final String text;
   final String ipa;
-  final String audioUrl;
+  final String audio;
   bool learned;
 
   SpeakingCard({
     required this.text,
     required this.ipa,
-    required this.audioUrl,
+    required this.audio,
     this.learned = false,
   });
 }
@@ -27,15 +28,17 @@ class SpeakingDetailScreen extends StatefulWidget {
   });
 
   @override
-  State<SpeakingDetailScreen> createState() => _SpeakingDetailScreenState();
+  State<SpeakingDetailScreen> createState() =>
+      _SpeakingDetailScreenState();
 }
 
-class _SpeakingDetailScreenState extends State<SpeakingDetailScreen> {
+class _SpeakingDetailScreenState
+    extends State<SpeakingDetailScreen> {
   final _player = AudioPlayer();
-  final _pageController = PageController();
+  final _page = PageController();
 
   List<SpeakingCard> cards = [];
-  int currentIndex = 0;
+  int index = 0;
   bool loading = true;
 
   @override
@@ -45,42 +48,40 @@ class _SpeakingDetailScreenState extends State<SpeakingDetailScreen> {
   }
 
   Future<void> _load() async {
-    try {
-      final data =
-      await SpeakingApiService.getMaterials(widget.activityId);
+    final learned =
+    await SpeakingProgressService.getLearned(
+        widget.activityId);
 
-      final List<SpeakingCard> result = [];
+    final data = await SpeakingApiService.getMaterials(
+        widget.activityId);
 
-      for (final symbol in data['symbols']) {
-        // card symbol
-        result.add(
-          SpeakingCard(
-            text: symbol['symbol'],
-            ipa: symbol['example_word_transcription'] ?? '',
-            audioUrl: symbol['symbol_sound_url'],
-          ),
-        );
+    final List<SpeakingCard> result = [];
 
-        // card words
-        for (final word in symbol['words']) {
-          result.add(
-            SpeakingCard(
-              text: word['word'],
-              ipa: word['word_transcription'],
-              audioUrl: word['word_sound_url'],
-            ),
-          );
-        }
+    for (final s in data['symbols']) {
+      result.add(SpeakingCard(
+        text: s['symbol'],
+        ipa: s['example_word_transcription'] ?? '',
+        audio: s['symbol_sound_url'],
+        learned: learned.contains(s['symbol']),
+      ));
+
+      for (final w in s['words']) {
+        result.add(SpeakingCard(
+          text: w['word'],
+          ipa: w['word_transcription'],
+          audio: w['word_sound_url'],
+          learned: learned.contains(w['word']),
+        ));
       }
-
-      setState(() {
-        cards = result;
-        loading = false;
-      });
-    } catch (e) {
-      debugPrint('❌ Load speaking detail error: $e');
-      loading = false;
     }
+
+    await SpeakingProgressService.saveTotal(
+        widget.activityId, result.length);
+
+    setState(() {
+      cards = result;
+      loading = false;
+    });
   }
 
   Future<void> _play(String url) async {
@@ -88,102 +89,94 @@ class _SpeakingDetailScreenState extends State<SpeakingDetailScreen> {
     _player.play();
   }
 
-  void _markLearned() {
+  void _markLearned() async {
+    final card = cards[index];
+    await SpeakingProgressService.markLearned(
+        widget.activityId, card.text);
+
     setState(() {
-      cards[currentIndex].learned = true;
-
-      // đẩy card đã học xuống cuối
-      cards.sort((a, b) {
-        if (a.learned == b.learned) return 0;
-        return a.learned ? 1 : -1;
-      });
-
-      currentIndex = 0;
-      _pageController.jumpToPage(0);
+      card.learned = true;
+      cards.sort((a, b) =>
+      a.learned == b.learned
+          ? 0
+          : a.learned
+          ? 1
+          : -1);
+      index = 0;
+      _page.jumpToPage(0);
     });
-  }
-
-  @override
-  void dispose() {
-    _player.dispose();
-    _pageController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+          body: Center(child: CircularProgressIndicator()));
     }
 
+    final learned =
+        cards.where((e) => e.learned).length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F6),
-      appBar: AppBar(
-        title: Text(widget.title),
-      ),
+      appBar: AppBar(title: Text(widget.title)),
       body: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
               children: [
-                Text('Card ${currentIndex + 1}/${cards.length}'),
-                Text(
-                  '${cards.where((e) => e.learned).length} learned',
-                  style: const TextStyle(color: Colors.green),
+                LinearProgressIndicator(
+                  value: learned / cards.length,
+                  color: const Color(0xFF4CD080),
                 ),
+                const SizedBox(height: 6),
+                Text('$learned / ${cards.length} learned'),
               ],
             ),
           ),
           Expanded(
             child: PageView.builder(
-              controller: _pageController,
+              controller: _page,
               itemCount: cards.length,
-              onPageChanged: (i) {
-                setState(() => currentIndex = i);
-              },
-              itemBuilder: (context, index) {
-                final card = cards[index];
+              onPageChanged: (i) =>
+                  setState(() => index = i),
+              itemBuilder: (_, i) {
+                final c = cards[i];
                 return Center(
                   child: Card(
                     elevation: 6,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius:
+                      BorderRadius.circular(20),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(32),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            card.text,
-                            style: const TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text(c.text,
+                              style: const TextStyle(
+                                  fontSize: 36,
+                                  fontWeight:
+                                  FontWeight.bold)),
                           const SizedBox(height: 12),
-                          Text(
-                            card.ipa,
-                            style: const TextStyle(color: Colors.grey),
-                          ),
+                          Text(c.ipa),
                           const SizedBox(height: 24),
                           IconButton(
-                            icon: const Icon(Icons.play_circle, size: 64),
-                            onPressed: () => _play(card.audioUrl),
+                            icon: const Icon(
+                                Icons.play_circle,
+                                size: 64),
+                            onPressed: () =>
+                                _play(c.audio),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           ElevatedButton(
-                            onPressed:
-                            card.learned ? null : _markLearned,
-                            child: Text(
-                              card.learned
-                                  ? 'Đã học'
-                                  : 'Đánh dấu đã học',
-                            ),
+                            onPressed: c.learned
+                                ? null
+                                : _markLearned,
+                            child: Text(c.learned
+                                ? 'Đã học'
+                                : 'Đánh dấu đã học'),
                           ),
                         ],
                       ),
