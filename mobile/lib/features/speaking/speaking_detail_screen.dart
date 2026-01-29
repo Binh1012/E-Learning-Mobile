@@ -1,153 +1,199 @@
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:just_audio/just_audio.dart';
 import '../../core/services/speaking_api_service.dart';
+
+class SpeakingCard {
+  final String text;
+  final String ipa;
+  final String audioUrl;
+  bool learned;
+
+  SpeakingCard({
+    required this.text,
+    required this.ipa,
+    required this.audioUrl,
+    this.learned = false,
+  });
+}
 
 class SpeakingDetailScreen extends StatefulWidget {
   final int activityId;
   final String title;
 
   const SpeakingDetailScreen({
-    Key? key,
+    super.key,
     required this.activityId,
     required this.title,
-  }) : super(key: key);
+  });
 
   @override
   State<SpeakingDetailScreen> createState() => _SpeakingDetailScreenState();
 }
 
 class _SpeakingDetailScreenState extends State<SpeakingDetailScreen> {
-  late Future<Map<String, dynamic>> _materialFuture;
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  final _player = AudioPlayer();
+  final _pageController = PageController();
+
+  List<SpeakingCard> cards = [];
+  int currentIndex = 0;
+  bool loading = true;
 
   @override
   void initState() {
     super.initState();
-    _materialFuture =
-        SpeakingApiService.getLearningMaterials(widget.activityId);
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data =
+      await SpeakingApiService.getMaterials(widget.activityId);
+
+      final List<SpeakingCard> result = [];
+
+      for (final symbol in data['symbols']) {
+        // card symbol
+        result.add(
+          SpeakingCard(
+            text: symbol['symbol'],
+            ipa: symbol['example_word_transcription'] ?? '',
+            audioUrl: symbol['symbol_sound_url'],
+          ),
+        );
+
+        // card words
+        for (final word in symbol['words']) {
+          result.add(
+            SpeakingCard(
+              text: word['word'],
+              ipa: word['word_transcription'],
+              audioUrl: word['word_sound_url'],
+            ),
+          );
+        }
+      }
+
+      setState(() {
+        cards = result;
+        loading = false;
+      });
+    } catch (e) {
+      debugPrint('❌ Load speaking detail error: $e');
+      loading = false;
+    }
+  }
+
+  Future<void> _play(String url) async {
+    await _player.setUrl(url);
+    _player.play();
+  }
+
+  void _markLearned() {
+    setState(() {
+      cards[currentIndex].learned = true;
+
+      // đẩy card đã học xuống cuối
+      cards.sort((a, b) {
+        if (a.learned == b.learned) return 0;
+        return a.learned ? 1 : -1;
+      });
+
+      currentIndex = 0;
+      _pageController.jumpToPage(0);
+    });
   }
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    _player.dispose();
+    _pageController.dispose();
     super.dispose();
-  }
-
-  Future<void> _playAudio(String? url) async {
-    if (url == null || url.isEmpty) return;
-    await _audioPlayer.stop();
-    await _audioPlayer.play(UrlSource(url));
   }
 
   @override
   Widget build(BuildContext context) {
+    if (loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F6F6),
       appBar: AppBar(
         title: Text(widget.title),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
       ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _materialFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF4CD080)),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Không thể tải nội dung Speaking',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            );
-          }
-
-          final List symbols = snapshot.data?['symbols'] ?? [];
-
-          if (symbols.isEmpty) {
-            return const Center(
-              child: Text(
-                'Chưa có dữ liệu phát âm',
-                style: TextStyle(color: Colors.grey),
-              ),
-            );
-          }
-
-          return ListView.builder(
+      body: Column(
+        children: [
+          Padding(
             padding: const EdgeInsets.all(16),
-            itemCount: symbols.length,
-            itemBuilder: (context, index) {
-              final symbol = symbols[index];
-              final List words = symbol['words'] ?? [];
-
-              return Card(
-                elevation: 2,
-                shadowColor: Colors.black12,
-                margin: const EdgeInsets.only(bottom: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Card ${currentIndex + 1}/${cards.length}'),
+                Text(
+                  '${cards.where((e) => e.learned).length} learned',
+                  style: const TextStyle(color: Colors.green),
                 ),
-                child: ExpansionTile(
-                  maintainState: true,
-                  tilePadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  childrenPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  title: Text(
-                    symbol['symbol'] ?? '',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+              ],
+            ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: cards.length,
+              onPageChanged: (i) {
+                setState(() => currentIndex = i);
+              },
+              itemBuilder: (context, index) {
+                final card = cards[index];
+                return Center(
+                  child: Card(
+                    elevation: 6,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            card.text,
+                            style: const TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            card.ipa,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 24),
+                          IconButton(
+                            icon: const Icon(Icons.play_circle, size: 64),
+                            onPressed: () => _play(card.audioUrl),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed:
+                            card.learned ? null : _markLearned,
+                            child: Text(
+                              card.learned
+                                  ? 'Đã học'
+                                  : 'Đánh dấu đã học',
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                  subtitle: Text(
-                    symbol['note'] ?? '',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.volume_up),
-                    color: const Color(0xFF4CD080),
-                    onPressed: () =>
-                        _playAudio(symbol['symbol_sound_url']),
-                  ),
-                  children: words.map<Widget>((word) {
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF9F9F9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: ListTile(
-                        title: Text(
-                          word['word'] ?? '',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${word['word_transcription']} • ${word['word_mean']}',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.volume_up),
-                          color: const Color(0xFF4CD080),
-                          onPressed: () =>
-                              _playAudio(word['word_sound_url']),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

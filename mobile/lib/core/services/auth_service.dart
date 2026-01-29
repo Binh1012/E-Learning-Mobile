@@ -99,18 +99,15 @@ class AuthService {
           final refreshToken = tokenData['refreshToken'] as String?;
 
           if (accessToken != null && accessToken.isNotEmpty) {
-            print('✅ Access token received');
-
-            // Save both tokens
             if (refreshToken != null && refreshToken.isNotEmpty) {
-              return accessToken;
+              await saveTokens(accessToken, refreshToken);
             } else {
               final prefs = await SharedPreferences.getInstance();
               await prefs.setString(TOKEN_KEY, accessToken);
             }
-
             return accessToken;
-          } else {
+          }
+          else {
             throw Exception('No access token in response');
           }
         } else {
