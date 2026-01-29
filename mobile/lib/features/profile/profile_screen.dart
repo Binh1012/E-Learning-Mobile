@@ -1,23 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:email_validator/email_validator.dart';
-import 'dart:io';
+import '../../core/services/user_service.dart';
 
 class ProfileScreen extends StatefulWidget {
-  final String currentName;
-  final String currentEmail;
-  final String currentPhone;
-  final String currentAddress;
-  final String? currentAvatarPath;
-
-  const ProfileScreen({
-    Key? key,
-    required this.currentName,
-    required this.currentEmail,
-    this.currentPhone = '',
-    this.currentAddress = '',
-    this.currentAvatarPath,
-  }) : super(key: key);
+  const ProfileScreen({super.key});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -26,24 +14,20 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final ImagePicker _picker = ImagePicker();
-  
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  late TextEditingController _phoneController;
-  late TextEditingController _addressController;
-  
+
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
+
   File? _imageFile;
-  String? _avatarPath;
+  String? _avatarUrl;
   bool _isLoading = false;
+  bool _isInitLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.currentName);
-    _emailController = TextEditingController(text: widget.currentEmail);
-    _phoneController = TextEditingController(text: widget.currentPhone);
-    _addressController = TextEditingController(text: widget.currentAddress);
-    _avatarPath = widget.currentAvatarPath;
+    _loadProfile();
   }
 
   @override
@@ -51,424 +35,195 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _addressController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _loadProfile() async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 512,
-        maxHeight: 512,
-        imageQuality: 75,
-      );
-
-      if (pickedFile != null) {
-        setState(() {
-          _imageFile = File(pickedFile.path);
-          _avatarPath = pickedFile.path;
-        });
-      }
-    } catch (e) {
-      _showErrorSnackBar('Failed to pick image: $e');
+      final data = await UserService.getProfile();
+      _nameController.text = data['username'] ?? '';
+      _emailController.text = data['email'] ?? '';
+      _phoneController.text = data['number_phone'] ?? '';
+      _avatarUrl = data['avatar_url'];
+    } catch (_) {
+      _showError('Failed to load profile');
+    } finally {
+      setState(() => _isInitLoading = false);
     }
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  void _showSuccessSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF3DD598),
-      ),
-    );
-  }
-
-  Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    // Display confirmation dialog 
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'Confirm Changes',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          content: const Text(
-            'Are you sure you want to save these changes?',
-            style: TextStyle(
-              fontSize: 16,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Save',
-                style: TextStyle(
-                  color: Color(0xFF3DD598),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+  Future<void> _pickImage() async {
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 80,
     );
 
-    if (confirm != true) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    // Simulate saving data (replace with actual API call)
-    await Future.delayed(const Duration(seconds: 1));
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    // Return updated data
-    if (mounted) {
-      _showSuccessSnackBar('Profile updated successfully!');
-      
-      // Delay so the user can see the success message 
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Return updated data to previous screen
-      Navigator.of(context).pop({
-        'name': _nameController.text,
-        'email': _emailController.text,
-        'phone': _phoneController.text,
-        'address': _addressController.text,
-        'avatarPath': _avatarPath,
+    if (picked != null) {
+      setState(() {
+        _imageFile = File(picked.path);
       });
     }
   }
 
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      if (_imageFile != null) {
+        await UserService.updateAvatar(_imageFile!);
+      }
+
+      final updated = await UserService.updateProfile(
+        username: _nameController.text.trim(),
+        phoneNumber: _phoneController.text.trim(),
+      );
+
+      _showSuccess('Profile updated successfully');
+
+      Navigator.pop(context, updated);
+    } catch (_) {
+      _showError('Update failed');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.red),
+    );
+  }
+
+  void _showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: const Color(0xFF3DD598)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isInitLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Title
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: Row(
+      appBar: AppBar(
+        title: const Text('My Profile'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              Stack(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.black),
-                    onPressed: () => Navigator.of(context).pop(),
+                  CircleAvatar(
+                    radius: 60,
+                    backgroundImage: _imageFile != null
+                        ? FileImage(_imageFile!)
+                        : (_avatarUrl != null
+                        ? NetworkImage(_avatarUrl!)
+                        : null) as ImageProvider?,
+                    child: _avatarUrl == null && _imageFile == null
+                        ? const Icon(Icons.person, size: 60)
+                        : null,
                   ),
-                  const Text(
-                    'My Profile',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black,
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: GestureDetector(
+                      onTap: _pickImage,
+                      child: const CircleAvatar(
+                        backgroundColor: Color(0xFF3DD598),
+                        child: Icon(Icons.camera_alt, color: Colors.white),
+                      ),
                     ),
                   ),
                 ],
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 30),
 
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Avatar Section
-                      Center(
-                        child: Stack(
-                          children: [
-                            Container(
-                              width: 120,
-                              height: 120,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFD1D5DB),
-                                shape: BoxShape.circle,
-                                image: _imageFile != null
-                                    ? DecorationImage(
-                                        image: FileImage(_imageFile!),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _imageFile == null
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: Colors.grey[600],
-                                    )
-                                  : null,
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: GestureDetector(
-                                onTap: _pickImage,
-                                child: Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF3DD598),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.camera_alt,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+              _input(
+                label: 'Full Name',
+                controller: _nameController,
+                validator: (v) =>
+                v!.isEmpty ? 'Please enter your name' : null,
+              ),
 
-                      const SizedBox(height: 8),
+              _input(
+                label: 'Email',
+                controller: _emailController,
+                enabled: false,
+                validator: (v) => EmailValidator.validate(v!)
+                    ? null
+                    : 'Invalid email',
+              ),
 
-                      const Center(
-                        child: Text(
-                          'Add Photo',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Color(0xFF6B7280),
-                          ),
-                        ),
-                      ),
+              _input(
+                label: 'Phone Number',
+                controller: _phoneController,
+              ),
 
-                      const SizedBox(height: 30),
+              const SizedBox(height: 30),
 
-                      // Full Name
-                      const Text(
-                        'Full Name',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _nameController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter your name',
-                          filled: true,
-                          fillColor: const Color(0xFFF5F5F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your name';
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Email Address
-                      const Text(
-                        'Email Address',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: InputDecoration(
-                          hintText: 'Enter your email',
-                          filled: true,
-                          fillColor: const Color(0xFFF5F5F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter your email';
-                          }
-                          
-                          // Trim và validate
-                          final trimmedValue = value.trim();
-                          
-                          if (!EmailValidator.validate(trimmedValue)) {
-                            return 'Please enter a valid email';
-                          }
-                          
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Phone Number
-                      const Text(
-                        'Phone Number',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _phoneController,
-                        keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
-                          hintText: 'Enter your phone number',
-                          filled: true,
-                          fillColor: const Color(0xFFF5F5F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Address
-                      const Text(
-                        'Address',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _addressController,
-                        maxLines: 2,
-                        decoration: InputDecoration(
-                          hintText: 'Enter your address',
-                          filled: true,
-                          fillColor: const Color(0xFFF5F5F5),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 16,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // Edit Profile Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _saveProfile,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF3DD598),
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            disabledBackgroundColor: const Color(0xFF3DD598).withOpacity(0.5),
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.edit, size: 20),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Edit Profile',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-                    ],
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _saveProfile,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3DD598),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text(
+                    'Save Changes',
+                    style: TextStyle(fontSize: 16),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _input({
+    required String label,
+    required TextEditingController controller,
+    bool enabled = true,
+    String? Function(String?)? validator,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: TextFormField(
+        controller: controller,
+        enabled: enabled,
+        validator: validator,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: const Color(0xFFF5F5F5),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );

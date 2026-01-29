@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
 import '../../profile/profile_screen.dart';
 import '../../auth/login_screen.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/user_service.dart';
 
 class SettingsTab extends StatefulWidget {
   const SettingsTab({Key? key}) : super(key: key);
@@ -12,41 +12,46 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  String _userName = 'User';
-  String _userEmail = 'user@gmail.com';
-  String _userPhone = '+1 234 567 8900';
-  String _userAddress = '123 Main Street, City, State 12345';
-  String? _avatarPath;
+  String _userName = '';
+  String _userEmail = '';
+  String? _avatarUrl;
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final data = await UserService.getProfile();
+      setState(() {
+        _userName = data['username'] ?? '';
+        _userEmail = data['email'] ?? '';
+        _avatarUrl = data['avatar_url'];
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   Future<void> _navigateToProfile() async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => ProfileScreen(
-          currentName: _userName,
-          currentEmail: _userEmail,
-          currentPhone: _userPhone,
-          currentAddress: _userAddress,
-          currentAvatarPath: _avatarPath,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const ProfileScreen()),
     );
 
-    if (result != null && result is Map<String, dynamic>) {
-      setState(() {
-        _userName = result['name'] ?? _userName;
-        _userEmail = result['email'] ?? _userEmail;
-        _userPhone = result['phone'] ?? _userPhone;
-        _userAddress = result['address'] ?? _userAddress;
-        _avatarPath = result['avatarPath'];
-      });
-    }
+    // Reload profile after update
+    _loadProfile();
   }
 
   Future<void> _confirmLogout() async {
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (_) => AlertDialog(
         title: const Text('Logout'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
@@ -55,9 +60,7 @@ class _SettingsTabState extends State<SettingsTab> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Logout'),
           ),
@@ -67,19 +70,24 @@ class _SettingsTabState extends State<SettingsTab> {
 
     if (result == true) {
       await AuthService.logout();
-
       if (!mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const LoginScreen()),
-            (route) => false,
+            (_) => false,
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -90,34 +98,23 @@ class _SettingsTabState extends State<SettingsTab> {
               padding: EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 'Setting',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700),
               ),
             ),
 
             const SizedBox(height: 30),
 
-            // Profile
+            // Profile Header
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFFD1D5DB),
-                      image: _avatarPath != null
-                          ? DecorationImage(
-                        image: FileImage(File(_avatarPath!)),
-                        fit: BoxFit.cover,
-                      )
-                          : null,
-                    ),
-                    child: _avatarPath == null
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundImage: _avatarUrl != null
+                        ? NetworkImage(_avatarUrl!)
+                        : null,
+                    child: _avatarUrl == null
                         ? Icon(Icons.person, size: 40, color: Colors.grey[600])
                         : null,
                   ),
@@ -166,43 +163,18 @@ class _SettingsTabState extends State<SettingsTab> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  _buildSettingItem(
-                    icon: Icons.person_outline,
-                    title: 'Account Settings',
-                    onTap: _navigateToProfile,
-                  ),
-                  _buildSettingItem(
-                    icon: Icons.notifications_outlined,
-                    title: 'Notifications',
-                    onTap: () {},
-                  ),
-                  _buildSettingItem(
-                    icon: Icons.language,
-                    title: 'Language',
-                    onTap: () {},
-                  ),
-                  _buildSettingItem(
-                    icon: Icons.lock_outline,
-                    title: 'Privacy',
-                    onTap: () {},
-                  ),
-                  _buildSettingItem(
-                    icon: Icons.help_outline,
-                    title: 'Help & Support',
-                    onTap: () {},
-                  ),
-                  _buildSettingItem(
-                    icon: Icons.info_outline,
-                    title: 'About',
-                    onTap: () {},
-                  ),
+                  _item(Icons.person_outline, 'Account Settings', _navigateToProfile),
+                  _item(Icons.notifications_outlined, 'Notifications', () {}),
+                  _item(Icons.language, 'Language', () {}),
+                  _item(Icons.lock_outline, 'Privacy', () {}),
+                  _item(Icons.help_outline, 'Help & Support', () {}),
+                  _item(Icons.info_outline, 'About', () {}),
                   const SizedBox(height: 20),
-                  _buildSettingItem(
-                    icon: Icons.logout,
-                    title: 'Logout',
-                    iconColor: Colors.red,
-                    textColor: Colors.red,
-                    onTap: _confirmLogout,
+                  _item(
+                    Icons.logout,
+                    'Logout',
+                    _confirmLogout,
+                    color: Colors.red,
                   ),
                 ],
               ),
@@ -213,13 +185,12 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget _buildSettingItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    Color? iconColor,
-    Color? textColor,
-  }) {
+  Widget _item(
+      IconData icon,
+      String title,
+      VoidCallback onTap, {
+        Color color = const Color(0xFF3DD598),
+      }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -235,20 +206,16 @@ class _SettingsTabState extends State<SettingsTab> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: (iconColor ?? const Color(0xFF3DD598)).withOpacity(0.1),
+                color: color.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, color: iconColor ?? const Color(0xFF3DD598)),
+              child: Icon(icon, color: color),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Text(
                 title,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: textColor ?? Colors.black,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: color),
               ),
             ),
             Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey[400]),
